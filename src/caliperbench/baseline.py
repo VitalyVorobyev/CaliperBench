@@ -1,6 +1,7 @@
 """Textbook bilinear sampling, projection, finite differences and parabola fitting."""
 
 from time import perf_counter
+from typing import Literal
 
 import numpy as np
 
@@ -30,7 +31,13 @@ def _profile(image, strip):
     return sampled.mean(axis=1)
 
 
-def predict(image: np.ndarray, request: Request) -> Prediction:
+Method = Literal["gradient_parabolic", "gradient_integer", "midpoint_crossing"]
+METHODS = ("gradient_parabolic", "gradient_integer", "midpoint_crossing")
+
+
+def predict(
+    image: np.ndarray, request: Request, method: Method = "gradient_parabolic"
+) -> Prediction:
     """Accept a finite grayscale float image in [0,1]; positions are scan-distance pixels."""
     started = perf_counter()
     edges, reason = [], None
@@ -44,37 +51,62 @@ def predict(image: np.ndarray, request: Request) -> Prediction:
         # Fixed sigma=1 sample, radius=3 Gaussian. No adaptive or learned logic.
         k = np.exp(-0.5 * np.arange(-3, 4, dtype=float) ** 2)
         smooth = np.convolve(np.pad(profile, 3, mode="edge"), k / k.sum(), mode="valid")
-        gradient = np.gradient(smooth)
-        candidates = []
-        for sign in (1, -1):
-            response = sign * gradient
-            for i in range(1, len(response) - 1):
-                if (
-                    response[i] > 0.01
-                    and response[i] >= response[i - 1]
-                    and response[i] > response[i + 1]
-                ):
-                    denom = response[i - 1] - 2 * response[i] + response[i + 1]
-                    delta = 0 if denom == 0 else 0.5 * (response[i - 1] - response[i + 1]) / denom
-                    x = (
-                        (i + float(np.clip(delta, -0.5, 0.5)))
-                        * request.strip.length
-                        / (request.strip.samples - 1)
-                    )
-                    candidates.append((float(response[i]), x, "rising" if sign == 1 else "falling"))
-        # Greedy strongest peak per requested polarity, with increasing scan position.
-        for polarity in request.polarities:
-            eligible = [
-                c
-                for c in candidates
-                if (polarity == "either" or c[2] == polarity) and (not edges or c[1] > edges[-1])
-            ]
-            if not eligible:
-                raise ValueError("missing_peak")
-            edges.append(max(eligible, key=lambda c: (c[0], -c[1]))[1])
-        if not request.polarities and candidates:
-            # Preserve an actual false detection for negative-task evaluation.
-            edges = [max(candidates)[1]]
+        step = request.strip.length / (request.strip.samples - 1)
+        if method == "midpoint_crossing":
+            if len(request.polarities) != 1:
+                raise ValueError("midpoint_crossing_requires_one_edge")
+            before, after = float(np.median(smooth[:3])), float(np.median(smooth[-3:]))
+            if abs(after - before) < 0.05:
+                raise ValueError("insufficient_endpoint_contrast")
+            polarity = "rising" if after > before else "falling"
+            if request.polarities[0] not in ("either", polarity):
+                raise ValueError("wrong_polarity")
+            threshold = (before + after) / 2
+            crossings = []
+            for i in range(len(smooth) - 1):
+                a, b = smooth[i], smooth[i + 1]
+                if a <= threshold < b if polarity == "rising" else a >= threshold > b:
+                    crossings.append((i + (threshold - a) / (b - a)) * step)
+            if not crossings:
+                raise ValueError("missing_crossing")
+            edges = [min(crossings, key=lambda x: abs(x - request.strip.length / 2))]
+        elif method in {"gradient_parabolic", "gradient_integer"}:
+            gradient = np.gradient(smooth)
+            candidates = []
+            for sign in (1, -1):
+                response = sign * gradient
+                for i in range(1, len(response) - 1):
+                    if (
+                        response[i] > 0.01
+                        and response[i] >= response[i - 1]
+                        and response[i] > response[i + 1]
+                    ):
+                        denom = response[i - 1] - 2 * response[i] + response[i + 1]
+                        delta = (
+                            0
+                            if method == "gradient_integer" or denom == 0
+                            else 0.5 * (response[i - 1] - response[i + 1]) / denom
+                        )
+                        x = (i + float(np.clip(delta, -0.5, 0.5))) * step
+                        candidates.append(
+                            (float(response[i]), x, "rising" if sign == 1 else "falling")
+                        )
+            # Greedy strongest peak per requested polarity, with increasing scan position.
+            for polarity in request.polarities:
+                eligible = [
+                    c
+                    for c in candidates
+                    if (polarity == "either" or c[2] == polarity)
+                    and (not edges or c[1] > edges[-1])
+                ]
+                if not eligible:
+                    raise ValueError("missing_peak")
+                edges.append(max(eligible, key=lambda c: (c[0], -c[1]))[1])
+            if not request.polarities and candidates:
+                # Preserve an actual false detection for negative-task evaluation.
+                edges = [max(candidates)[1]]
+        else:
+            raise ValueError("unknown_method")
     except ValueError as exc:
         reason, edges = str(exc), []
     return Prediction(

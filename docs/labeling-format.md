@@ -2,7 +2,7 @@
 
 ## Current status (2026-09-26)
 
-No public dataset has been downloaded into CaliperBench, and no real-image `Sample` records have been curated or adjudicated. The committed `examples/annotation.jsonl` contains illustrative values and a placeholder image hash; it is not ground truth. The current `Sample`/`Request`/`Prediction` JSONL schema and generated JSON Schemas can validate benchmark tasks once labels exist. They do not yet preserve an editor's raw geometry, independent reviews, or proposal history.
+A local pilot has downloaded 49 weld-profile photos and 49 masks and generated 185 **automatic mask-proxy** `Sample` records under ignored `data/`. None has been independently reviewed or adjudicated. The committed `examples/annotation.jsonl` contains illustrative values and a placeholder image hash; it is not ground truth. The local pilot proxy is likewise not human-reviewed visible-edge ground truth; see `docs/pilot-weld-profiles.md`. The current `Sample`/`Request`/`Prediction` JSONL schema and generated JSON Schemas can validate benchmark tasks once labels exist. They do not yet preserve an editor's raw geometry, independent reviews, or proposal history.
 
 | Source | Supplied reference | What CaliperBench still needs |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ No public dataset has been downloaded into CaliperBench, and no real-image `Samp
 | VisA; DeepPCB | Anomaly masks or defect boxes | New edge labels. DeepPCB also needs license review and removal/flagging of artificial defects. |
 | Wang et al. 2019 steel plate | Paper describes manual high-resolution edge labels | Usable image/label download and dataset rights have not been located. |
 
-The detailed source evidence, access flags, and terms live in `registry/datasets.json`. An empty or `null` ground-truth field must stay empty until evidence is inspected; the registry is not a labeled release.
+The detailed source evidence, access flags, and terms live in `registry/datasets.json`. The weld-profile entry adds a verified 49-pair pilot with binary masks but no calibrated physical measurement. An empty or `null` ground-truth field must stay empty until evidence is inspected; the registry is not a labeled release.
 
 ## Present interchange
 

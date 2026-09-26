@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 
 from . import __version__
-from .baseline import predict
+from .baseline import METHODS, predict
 from .data import download, register, registry, sha256, under_root
 from .evaluate import evaluate
 from .schema import Prediction, Request, Sample
@@ -63,6 +63,7 @@ def main():
     p.add_argument("requests")
     p.add_argument("--data-root", default="data")
     p.add_argument("--output", required=True)
+    p.add_argument("--method", choices=METHODS, default="gradient_parabolic")
     p = sub.add_parser("score")
     p.add_argument("annotations")
     p.add_argument("predictions")
@@ -120,12 +121,12 @@ def main():
                             "baseline loader supports only 8-bit L/RGB; preprocess explicitly"
                         )
                     image = np.array(im.convert("L"), dtype=float) / 255
-                predictions.append(predict(image, request).model_dump())
+                predictions.append(predict(image, request, method=args.method).model_dump())
             _write(args.output, predictions)
             Path(str(args.output) + ".run.json").write_text(
                 json.dumps(
                     {
-                        "implementation": "textbook-reference-v1",
+                        "implementation": args.method,
                         "caliperbench": __version__,
                         "python": platform.python_version(),
                         "platform": platform.platform(),

@@ -2,7 +2,7 @@
 
 **A real-image benchmark for classical caliper, subpixel edge, and dimensional measurement.**
 
-CaliperBench is building a reproducible collection of small measurement tasks drawn from public real images. The repository already has a candidate dataset registry, annotation and prediction schemas, local acquisition tools, a scorer, and a deliberately simple reference algorithm. **There is no released real-image labeled test set or GUI yet.** Dataset images, model weights, and local labeling work stay outside Git.
+CaliperBench is building a reproducible collection of small measurement tasks drawn from public real images. The repository has a candidate dataset registry, annotation and prediction schemas, local acquisition tools, a scorer, and deliberately simple reference methods. **There is no released human-reviewed real-image test set or GUI yet.** Dataset images, model weights, and local labeling work stay outside Git.
 
 ## What is measured
 
@@ -16,7 +16,7 @@ These tracks are independent. A physical fruit diameter does not locate its imag
 
 ## Data and ground-truth status
 
-The [registry](registry/datasets.json) lists nine candidate sources, including AmodalAppleSize RGB-D, Apple Fruitlet Sizing 2026, ITODD/BOP, weld beads, MovingCables, VisA, DeepPCB and the 2019 steel-plate study. It records source links, terms, access state, expected reference types and relabeling work. Apple datasets offer physical caliper measurements; weld/cable/VisA data mainly offer masks; DeepPCB has boxes and unresolved use terms. The steel-plate images and labels have no located usable public download. **No source has yet been inspected and labeled into a CaliperBench release.** See [ground-truth and format details](docs/labeling-format.md).
+The [registry](registry/datasets.json) lists ten candidate sources, including AmodalAppleSize RGB-D, Apple Fruitlet Sizing 2026, ITODD/BOP, weld beads, MovingCables, VisA, DeepPCB and the 2019 steel-plate study. It records source links, terms, access state, expected reference types and relabeling work. Apple datasets offer physical caliper measurements; weld/cable/VisA data mainly offer masks; DeepPCB has boxes and unresolved use terms. The steel-plate images and labels have no located usable public download. A first local [weld-profile pilot](docs/pilot-weld-profiles.md) has 49 checksum-verified real photos and 185 automatically derived **mask-proxy** tasks. They are development-only and have not been visually adjudicated. No source has yet been labeled into a CaliperBench release. See [ground-truth and format details](docs/labeling-format.md).
 
 The first pilot will inspect actual source files, label visible edges at native resolution, quantify reviewer disagreement and preserve uncertainty. High-resolution labels transformed onto controlled downsampled views are proxy ground truth, with the transform and its limits recorded. Source images and raw archives will not be committed.
 
@@ -44,10 +44,11 @@ uv run caliperbench run outputs/requests.jsonl --data-root data --output outputs
 uv run caliperbench score data/annotations.jsonl outputs/baseline.jsonl --output outputs/report.json
 ```
 
-The baseline uses bilinear strip sampling, mean projection, fixed Gaussian smoothing, finite differences, peak selection and three-point parabolic refinement. It is a functional lower bar, not a production caliper. The committed [format example](examples/annotation.jsonl) has a placeholder hash and no image.
+The default baseline uses bilinear strip sampling, mean projection, fixed Gaussian smoothing, finite differences, peak selection and three-point parabolic refinement. `--method` also selects integer-gradient and midpoint-crossing textbook comparators. The [pilot report](docs/pilot-weld-profiles.md) gives their first real-image mask-proxy results. These methods are functional lower bars, not production calipers. The committed [format example](examples/annotation.jsonl) has a placeholder hash and no image.
 
 ## Project files
 
+- [First real-image pilot](docs/pilot-weld-profiles.md) — verified local data, proxy task construction and first baseline numbers.
 - [Roadmap](docs/roadmap.md) — GUI, data, review and model-assistance phases.
 - [Labeling format and ground-truth status](docs/labeling-format.md) — current JSONL and planned editor document.
 - [Dataset acquisition](docs/datasets.md) — local cache, checksums, provenance and rights.

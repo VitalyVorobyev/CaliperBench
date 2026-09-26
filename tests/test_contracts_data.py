@@ -75,7 +75,8 @@ def test_download_checksum_and_manifest(tmp_path):
 def test_registry_evidence_and_schema_examples():
     root = Path(__file__).resolve().parents[1]
     entries = json.loads((root / "registry/datasets.json").read_text())["datasets"]
-    assert len(entries) == len({e["id"] for e in entries}) == 9
+    assert len(entries) == len({e["id"] for e in entries})
+    assert {"amodal-apple", "itodd-bop", "weld-profiles-2026"} <= {e["id"] for e in entries}
     for entry in entries:
         assert entry["license"]["evidence_url"] in entry["evidence_urls"]
         assert entry["verified_on"] and entry["relabeling_strategy"]

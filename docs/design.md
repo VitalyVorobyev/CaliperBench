@@ -26,6 +26,12 @@ For responses a, b, c around a peak, the offset is
 see Julius O. Smith's [quadratic interpolation derivation](https://www.dsprelated.com/freebooks/sasp/Quadratic_Interpolation_Spectral_Peaks.html).
 No source code was imported from third-party caliper implementations.
 
+The CLI also offers two deliberately plain comparators on the same sampled and
+smoothed profile: `gradient_integer` omits the parabolic offset, while
+`midpoint_crossing` linearly interpolates the half-intensity crossing between
+median endpoint levels on a single-edge strip. Their first real-image proxy run
+and its limitations are recorded in `pilot-weld-profiles.md`.
+
 Polarity requests are processed left-to-right with greedy strongest-peak selection.
 This intentionally fails on many cluttered, weak or ambiguous boundaries. There is
 no robust pair search, adaptive tuning, learned component, uncertainty estimator,

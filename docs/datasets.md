@@ -8,7 +8,7 @@ P3 access/rights/quality investigation. Dataset and repository code licenses dif
 The first pass checked public source metadata on 2026-09-26. The Figshare API supplied
 the weld dataset's MIT license where the website blocked automated access. The
 institutional AmodalAppleSize record supplied CC BY 4.0 metadata; its canonical
-Dataverse page was not retrievable by the browser. No image archive was downloaded.
+Dataverse page was not retrievable by the browser. A 49-pair weld-profile pilot was later downloaded and verified file by file as described in `pilot-weld-profiles.md`.
 The steel-plate paper is located but no usable dataset download or data license was
 found. Never treat an article's open-access license as a dataset grant.
 

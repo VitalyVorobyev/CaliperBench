@@ -51,3 +51,17 @@ def test_invalid_images(request_record, bad):
 def test_out_of_bounds(request_record):
     p = predict(np.zeros((3, 64)), request_record)
     assert p.status == "failed" and p.reason == "strip_out_of_bounds"
+
+
+def test_textbook_method_comparison(request_record):
+    image = np.zeros((9, 64))
+    image[:, 16:] = 1
+    single = request_record.model_copy(update={"polarities": ["rising"]})
+    integer = predict(image, single, method="gradient_integer")
+    parabola = predict(image, single, method="gradient_parabolic")
+    midpoint = predict(image, single, method="midpoint_crossing")
+    assert integer.status == parabola.status == midpoint.status == "ok"
+    assert integer.edges_px[0] == pytest.approx(15)
+    assert parabola.edges_px[0] == pytest.approx(15.5)
+    assert midpoint.edges_px[0] == pytest.approx(15.5, abs=0.1)
+    assert predict(image, request_record, method="midpoint_crossing").status == "failed"

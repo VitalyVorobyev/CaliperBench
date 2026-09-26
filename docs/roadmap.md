@@ -2,7 +2,7 @@
 
 ## Status
 
-The Python registry, local cache tooling, v1 benchmark JSONL, simple reference baseline, scorer, tests and CI are implemented. Nine real-data sources are candidates with public metadata and access caveats. No real data or adjudicated labels have been imported. There is no CaliperBench GUI, editor store, auto-labeling adapter, or published benchmark split yet.
+The Python registry, local cache tooling, v1 benchmark JSONL, simple reference baseline, scorer, tests and CI are implemented. Ten real-data sources are registered. One local weld-profile pilot contains 49 verified real images and 185 low-confidence mask-proxy tasks; no human-adjudicated edge labels have been imported. There is no CaliperBench GUI, editor store, advanced-model adapter, or published benchmark split yet.
 
 The GUI will be a CaliperBench-specific React app. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) supplies a proven browser, annotation queue, zoom/pan, revision workflow, mask import, and MobileSAM-assisted draft interaction to study and reuse. [lab-ui](https://github.com/VitalyVorobyev/lab-ui) is the single source for reusable controls and canvas infrastructure: its split `@vitavision/ui`, `@vitavision/stage2d` and `@vitavision/charts` packages include `ImageStage`, image-coordinate transforms, measurement overlays and line profiles. CaliperBench owns its task-specific editor and data model. Do not introduce a competing generic canvas package.
 
@@ -10,7 +10,7 @@ The GUI will be a CaliperBench-specific React app. [visual-anomaly-lab](https://
 
 **Outcome:** one legally usable, modest real-image pilot with a reproducible local manifest.
 
-- Inspect the selected archive, native image dimensions, source labels, file hashes, source IDs and actual terms. Start with a small apple or weld subset; prioritize an apple source for the physical track and a mask-backed source for edge-workflow diversity.
+- The weld-profile subset is acquired and verified; inspect its boundary semantics with independent reviewers. Add an apple subset for the physical track after exact object and measurement mapping is checked.
 - Add a source-specific conversion/inventory script after inspecting actual files. Assign group splits before creating tasks.
 - Publish a metadata-only pilot inventory and the reason for each inclusion/exclusion; retain image bytes locally.
 

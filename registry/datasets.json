@@ -328,6 +328,42 @@
       ],
       "verified_on": "2026-09-26",
       "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "weld-profiles-2026",
+      "name": "Segmentation Masks of MIG/MAG Fillet Weld Joint Profile Images",
+      "source": "https://zenodo.org/records/20301441",
+      "doi": "10.5281/zenodo.20301441",
+      "version": "v1 (2026-05-20)",
+      "license": {
+        "id": "CC-BY-4.0",
+        "evidence_url": "https://zenodo.org/records/20301441",
+        "status": "publisher_statement"
+      },
+      "domain": "weld profile photography",
+      "image_count": "49 image/mask pairs",
+      "resolution": "640 x 480",
+      "data_nature": "real VGA camera images with binary region masks",
+      "ground_truth": {
+        "calibration": "fixed camera setup described, no metric calibration supplied",
+        "cad": false,
+        "physical": null,
+        "edge": "binary weld-region masks; only coarse boundary proxy"
+      },
+      "relabeling_strategy": "Inspect native photos; draw reviewed visible transitions. Automatic top-of-mask crossings are low-confidence development-only proxy tasks.",
+      "redistribution_constraints": "CC BY 4.0 attribution; cite Zenodo record and identify derived labels.",
+      "priority": "P2",
+      "access_status": "publisher_files_accessible",
+      "download_enabled": true,
+      "download_hosts": [
+        "zenodo.org"
+      ],
+      "evidence_urls": [
+        "https://zenodo.org/records/20301441",
+        "https://zenodo.org/api/records/20301441"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Publisher API metadata, license, 98 file sizes and MD5 hashes verified; local download adapter verifies each file. Mask semantics inspected on a small visual sample, not all boundaries adjudicated."
     }
   ]
 }
