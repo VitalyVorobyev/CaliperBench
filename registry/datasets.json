@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "datasets": [
+    {
+      "id": "amodal-apple",
+      "name": "AmodalAppleSize_RGB-D",
+      "source": "https://portalrecerca.udl.cat/documentos/668fc490b9e7c03b01be139a",
+      "doi": "10.34810/DATA916",
+      "version": "1.1 listed by institutional record",
+      "license": {
+        "id": "CC-BY-4.0",
+        "evidence_url": "https://portalrecerca.udl.cat/documentos/668fc490b9e7c03b01be139a",
+        "status": "publisher_statement"
+      },
+      "domain": "orchard fruit",
+      "image_count": "3925 Fuji RGB-D images; 2731 Elstar RGB-D images",
+      "resolution": null,
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": "RGB-D; inspect archive for camera parameters",
+        "cad": false,
+        "physical": "Fuji per-apple caliper diameters; Elstar tree/stage means",
+        "edge": "modal/amodal masks; not subpixel GT"
+      },
+      "relabeling_strategy": "Annotate visible unoccluded silhouettes at native resolution; retain physical fruit IDs separately. Never use amodal boundaries as observed edges.",
+      "redistribution_constraints": "Attribution required; retain source citation and mark derivatives.",
+      "priority": "P1",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "dataverse.csuc.cat",
+        "zenodo.org"
+      ],
+      "evidence_urls": [
+        "https://portalrecerca.udl.cat/documentos/668fc490b9e7c03b01be139a",
+        "https://dataverse.csuc.cat/dataset.xhtml?persistentId=doi:10.34810/DATA916",
+        "https://github.com/GRAP-UdL-AT/Amodal_Fruit_Sizing"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "apple-fruitlet-2026",
+      "name": "Apple Fruitlet Sizing and Growth Rate Tracking",
+      "source": "https://data.mendeley.com/datasets/k45nnfjydt/1",
+      "doi": "10.17632/k45nnfjydt.1",
+      "version": "1 (2026-02-20)",
+      "license": {
+        "id": "CC-BY-4.0",
+        "evidence_url": "https://data.mendeley.com/datasets/k45nnfjydt/1",
+        "status": "publisher_statement"
+      },
+      "domain": "orchard fruit",
+      "image_count": null,
+      "resolution": null,
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": "stereo calibration and rectified stereo images",
+        "cad": false,
+        "physical": "ground-truth caliper measurements",
+        "edge": "Mask R-CNN annotations; not subpixel GT"
+      },
+      "relabeling_strategy": "Match cluster, fruit and day IDs; annotate visible boundaries independently of physical diameter.",
+      "redistribution_constraints": "Attribution required; identify modifications.",
+      "priority": "P1",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "data.mendeley.com",
+        "prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com"
+      ],
+      "evidence_urls": [
+        "https://data.mendeley.com/datasets/k45nnfjydt/1"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "itodd-bop",
+      "name": "MVTec ITODD / BOP",
+      "source": "https://www.mvtec.com/research-teaching/datasets/mvtec-itodd",
+      "doi": null,
+      "version": "see source",
+      "license": {
+        "id": "CC-BY-NC-SA-4.0",
+        "evidence_url": "https://www.mvtec.com/research-teaching/datasets/mvtec-itodd",
+        "status": "publisher_statement"
+      },
+      "domain": "industrial rigid objects",
+      "image_count": "3500 scenes / 28 objects in original; BOP is a subset",
+      "resolution": null,
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": "multi-sensor calibration; verify selected BOP split",
+        "cad": true,
+        "physical": "CAD geometry; not independent as-built dimensional measurements",
+        "edge": "pose-derived silhouettes are proxy GT; test poses may be withheld"
+      },
+      "relabeling_strategy": "Start with real validation images; label exposed metal silhouettes and inspect pose/calibration uncertainty. Exclude train_pbr.",
+      "redistribution_constraints": "Noncommercial only, attribution and share-alike; keep separate from unrestricted tracks.",
+      "priority": "P1",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "huggingface.co"
+      ],
+      "evidence_urls": [
+        "https://www.mvtec.com/research-teaching/datasets/mvtec-itodd",
+        "https://huggingface.co/datasets/bop-benchmark/itodd",
+        "https://bop.felk.cvut.cz/datasets/"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "weld-beads",
+      "name": "Weld bead images and masks",
+      "source": "https://api.figshare.com/v2/articles/25904014",
+      "doi": "10.6084/m9.figshare.25904014.v1",
+      "version": "1",
+      "license": {
+        "id": "MIT",
+        "evidence_url": "https://api.figshare.com/v2/articles/25904014",
+        "status": "publisher_statement"
+      },
+      "domain": "weld bead",
+      "image_count": "1394 images and 1394 masks",
+      "resolution": "448 x 448",
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": null,
+        "cad": false,
+        "physical": null,
+        "edge": "binary segmentation masks only"
+      },
+      "relabeling_strategy": "Use masks to nominate strips; manually review ambiguous bead boundaries. Native resolution limits subpixel claims.",
+      "redistribution_constraints": "Preserve MIT copyright/permission notices; verify accompanying archive notices.",
+      "priority": "P2",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "api.figshare.com",
+        "ndownloader.figshare.com"
+      ],
+      "evidence_urls": [
+        "https://api.figshare.com/v2/articles/25904014",
+        "https://figshare.com/articles/dataset/Weld_bead_images_and_masks/25904014"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "weld-literature",
+      "name": "Weld bead images from the literature",
+      "source": "https://data.mendeley.com/datasets/9mrmttnjh5/1",
+      "doi": "10.17632/9mrmttnjh5.1",
+      "version": "1",
+      "license": {
+        "id": "CC-BY-4.0",
+        "evidence_url": "https://data.mendeley.com/datasets/9mrmttnjh5/1",
+        "status": "publisher_statement"
+      },
+      "domain": "weld bead",
+      "image_count": "about 300 images; 2677 beads",
+      "resolution": null,
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": null,
+        "cad": false,
+        "physical": null,
+        "edge": "manual pixel masks"
+      },
+      "relabeling_strategy": "Inspect original sources in attribution spreadsheet; avoid rescaled paper figures for precision evaluation.",
+      "redistribution_constraints": "Deposit states CC BY 4.0; underlying literature images need per-image rights review before redistribution.",
+      "priority": "P3",
+      "access_status": "rights_review_required",
+      "download_enabled": false,
+      "download_hosts": [],
+      "evidence_urls": [
+        "https://data.mendeley.com/datasets/9mrmttnjh5/1"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "moving-cables",
+      "name": "MovingCables",
+      "source": "https://github.com/holesond/movingcables",
+      "doi": "10.5281/zenodo.14627726",
+      "version": "v2 (2025-01-10)",
+      "license": {
+        "id": "CC-BY-SA-4.0",
+        "evidence_url": "https://github.com/holesond/movingcables",
+        "status": "publisher_statement"
+      },
+      "domain": "real cables",
+      "image_count": "177 postprocessed source clips; 312 composed clips (excluded)",
+      "resolution": null,
+      "data_nature": "real acquisition; source RGBA already chroma-key processed; standard release composited",
+      "ground_truth": {
+        "calibration": "inspect source package",
+        "cad": false,
+        "physical": null,
+        "edge": "Marker-derived masks/flow; chroma-keyed source, not native subpixel edge truth"
+      },
+      "relabeling_strategy": "Inspect RGB channels of source clips; ignore chroma-key alpha as precision GT. Exclude composed clips. Group by sequence and relabel visible cable edges.",
+      "redistribution_constraints": "Dataset CC BY-SA 4.0; repository code MIT. Attribute and preserve share-alike on derivatives.",
+      "priority": "P2",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "zenodo.org"
+      ],
+      "evidence_urls": [
+        "https://github.com/holesond/movingcables",
+        "https://zenodo.org/records/14627726"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified.",
+      "assets": [
+        {
+          "name": "MovingCables_src.tar",
+          "url": "https://zenodo.org/records/14627726/files/MovingCables_src.tar",
+          "sha256": "7639c617de58746c0ea1c6ca2c9c8b29fd53bf5c12476aa958dea07bf310c866",
+          "checksum_source": "https://zenodo.org/records/14627726",
+          "size_note": "59.6 GiB; publisher metadata; not downloaded"
+        }
+      ]
+    },
+    {
+      "id": "visa",
+      "name": "VisA",
+      "source": "https://github.com/amazon-science/spot-diff",
+      "doi": null,
+      "version": "see source",
+      "license": {
+        "id": "CC-BY-4.0",
+        "evidence_url": "https://github.com/amazon-science/spot-diff",
+        "status": "publisher_statement"
+      },
+      "domain": "industrial parts, PCB and food",
+      "image_count": "10821 images / 12 objects",
+      "resolution": null,
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": null,
+        "cad": false,
+        "physical": null,
+        "edge": "anomaly masks, not object edge GT"
+      },
+      "relabeling_strategy": "Select object silhouettes and track boundaries; annotate new strips. Do not score anomaly masks as dimensional truth.",
+      "redistribution_constraints": "Dataset CC BY 4.0; code Apache-2.0. Attribute and document relabeling.",
+      "priority": "P2",
+      "access_status": "landing_verified_files_not_downloaded",
+      "download_enabled": true,
+      "download_hosts": [
+        "amazon-visual-anomaly.s3.us-west-2.amazonaws.com"
+      ],
+      "evidence_urls": [
+        "https://github.com/amazon-science/spot-diff"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "deeppcb",
+      "name": "DeepPCB",
+      "source": "https://github.com/tangsanli5201/DeepPCB",
+      "doi": null,
+      "version": "see source",
+      "license": {
+        "id": "MIT + research-only notice",
+        "evidence_url": "https://github.com/tangsanli5201/DeepPCB",
+        "status": "publisher_statement"
+      },
+      "domain": "PCB",
+      "image_count": "1500 aligned image pairs",
+      "resolution": "640 x 640 crops; original acquisition about 16k x 16k",
+      "data_nature": "real acquisition with preprocessing and artificial defects",
+      "ground_truth": {
+        "calibration": "approx. 48 px/mm acquisition claim, not a calibration certificate",
+        "cad": false,
+        "physical": null,
+        "edge": "defect boxes; binarized/preprocessed imagery"
+      },
+      "relabeling_strategy": "Inspect retained grayscale content; prefer genuine unaffected boundaries. Artificially added defects must be tagged/excluded.",
+      "redistribution_constraints": "README says research only although repository LICENSE is MIT; clarify dataset terms before reuse/redistribution.",
+      "priority": "P3",
+      "access_status": "license_conflict_review_required",
+      "download_enabled": false,
+      "download_hosts": [],
+      "evidence_urls": [
+        "https://github.com/tangsanli5201/DeepPCB"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    },
+    {
+      "id": "steel-plate-2019",
+      "name": "Wang et al. steel-plate subpixel dataset",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6928596/",
+      "doi": "10.3390/s19235302",
+      "version": "see source",
+      "license": {
+        "id": "unknown",
+        "evidence_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6928596/",
+        "status": "unresolved"
+      },
+      "domain": "steel plate",
+      "image_count": "241 training + 62 test images (paper)",
+      "resolution": "2048 x 2448 (paper)",
+      "data_nature": "real",
+      "ground_truth": {
+        "calibration": null,
+        "cad": false,
+        "physical": null,
+        "edge": "paper describes manual high-resolution labels and 4x downsampling"
+      },
+      "relabeling_strategy": "If released, inspect original annotations and pixel-center transform; account for annotator error rather than treating divided coordinates as exact.",
+      "redistribution_constraints": "Article access/license does not grant a dataset license. No usable public data download located in this review.",
+      "priority": "P3",
+      "access_status": "download_not_located",
+      "download_enabled": false,
+      "download_hosts": [],
+      "evidence_urls": [
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC6928596/",
+        "https://doi.org/10.3390/s19235302"
+      ],
+      "verified_on": "2026-09-26",
+      "verification_scope": "Public metadata and terms only; no archive contents or checksum verified."
+    }
+  ]
+}

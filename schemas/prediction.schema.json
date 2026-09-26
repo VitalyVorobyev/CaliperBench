@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "PhysicalPrediction": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "exclusiveMinimum": 0,
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "mm",
+            "um",
+            "m"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "PhysicalPrediction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sample_id": {
+      "minLength": 1,
+      "title": "Sample Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "edges_px": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 2,
+      "title": "Edges Px",
+      "type": "array"
+    },
+    "physical": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PhysicalPrediction"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "runtime_ms": {
+      "minimum": 0,
+      "title": "Runtime Ms",
+      "type": "number"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    }
+  },
+  "required": [
+    "sample_id",
+    "status",
+    "runtime_ms"
+  ],
+  "title": "Prediction",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "Strip": {
+      "additionalProperties": false,
+      "properties": {
+        "start_xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Start Xy",
+          "type": "array"
+        },
+        "end_xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "End Xy",
+          "type": "array"
+        },
+        "width_px": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Width Px",
+          "type": "number"
+        },
+        "samples": {
+          "default": 101,
+          "maximum": 100000,
+          "minimum": 5,
+          "title": "Samples",
+          "type": "integer"
+        },
+        "across": {
+          "default": 1,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Across",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_xy",
+        "end_xy"
+      ],
+      "title": "Strip",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sample_id": {
+      "minLength": 1,
+      "title": "Sample Id",
+      "type": "string"
+    },
+    "image": {
+      "title": "Image",
+      "type": "string"
+    },
+    "image_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Image Sha256",
+      "type": "string"
+    },
+    "strip": {
+      "$ref": "#/$defs/Strip"
+    },
+    "polarities": {
+      "items": {
+        "enum": [
+          "rising",
+          "falling",
+          "either"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Polarities",
+      "type": "array"
+    }
+  },
+  "required": [
+    "sample_id",
+    "image",
+    "image_sha256",
+    "strip",
+    "polarities"
+  ],
+  "title": "Request",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
