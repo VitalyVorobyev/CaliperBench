@@ -12,9 +12,10 @@ CaliperBench is a public benchmark for real-image edge localization and dimensio
 ## UI ownership
 
 - Build the CaliperBench browsing and labeling app here. Reuse the interaction model already implemented in `/Users/vitalyvorobyev/vision/visual-anomaly-lab`, but do not depend on that application's private state or copy its app-specific editor wholesale.
-- Use `/Users/vitalyvorobyev/vision/lab-ui` as the source of reusable React controls and 2D stage features. New reusable canvas primitives belong in `@vitavision/stage2d`; CaliperBench task forms, review workflow, and persistence belong here. Lab-ui's split packages (`@vitavision/ui`, `@vitavision/stage2d`, `@vitavision/charts`) are preferred over its deprecated compatibility package.
+- Use `/Users/vitalyvorobyev/vision/lab-ui` as the source of reusable React controls and 2D stage features. New reusable canvas primitives belong in `@vitavision/stage2d`; CaliperBench task forms, review workflow, and persistence belong here. Use split `@vitavision/ui`, `/forms`, `/charts`, and `/stage2d`, rather than the deprecated compatibility package. The current app's small contour adapter is temporary until the upstream package releases `ContourEditor`.
 - Respect coordinate frames: CaliperBench uses pixel centers (`0,0` is the first pixel center); visual-anomaly-lab region documents use pixel-edge coordinates. An import adapter must explicitly transform coordinates and retain the original document and convention.
 - Generated proposals remain drafts until a human reviews them. Keep the proposal model/version/prompts and approval history; never quietly overwrite a completed reference.
+- The first weld pilot uses one reviewer. Require explicit contour and crossing approval with uncertainty; do not describe this as inter-reviewer agreement or independently measured uncertainty. Keep physical measurements separate.
 
 ## Checks
 

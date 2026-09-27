@@ -1,8 +1,8 @@
 # Labeling format and ground-truth status
 
-## Current status (2026-09-26)
+## Current status
 
-A local pilot has downloaded 49 weld-profile photos and 49 masks and generated 185 **automatic mask-proxy** `Sample` records under ignored `data/`. None has been independently reviewed or adjudicated. The committed `examples/annotation.jsonl` contains illustrative values and a placeholder image hash; it is not ground truth. The local pilot proxy is likewise not human-reviewed visible-edge ground truth; see `docs/pilot-weld-profiles.md`. The current `Sample`/`Request`/`Prediction` JSONL schema and generated JSON Schemas can validate benchmark tasks once labels exist. They do not yet preserve an editor's raw geometry, independent reviews, or proposal history.
+A local pilot has downloaded 49 weld-profile photos and 49 masks and generated 185 **automatic mask-proxy** tasks under ignored `data/`. The committed 12-image pilot selection has editable classical contour proposals and a local review app. No crossing is yet approved. The `examples/annotation.jsonl` values and old mask-proxy file are not reviewed ground truth. `Sample`/`Request`/`Prediction` JSONL remains the evaluation contract; the separate local review document retains raw geometry and approval history.
 
 | Source | Supplied reference | What CaliperBench still needs |
 | --- | --- | --- |
@@ -26,11 +26,11 @@ One line in `data/annotations.jsonl` is a `Sample` (`src/caliperbench/schema.py`
 
 `uv run caliperbench export ...` creates requests without truth for a black-box runner. Predictions are separate JSONL. `docs/protocol.md` defines coordinates and scoring. The current schema is a benchmark **projection**, not a sufficient working format for a labeling GUI.
 
-## Planned editor source format
+## Local editor source format
 
-Introduce a versioned annotation document under ignored `data/annotations/` before implementing the GUI. The document should store immutable revisions keyed by original image hash and source version. Each revision should carry image dimensions and coordinate convention; task-specific strip endpoints/width/polarity; source-frame polylines, edge points or explicit no-edge regions; visible versus occluded/amodal semantics; reviewer IDs, timestamp, uncertainty, confidence, and adjudication state. Preserve imported masks/polygons as linked source evidence rather than silently converting them into edge truth. Keep physical measurement records keyed by the actual object, measurement axis, acquisition session and unit, with calibration and uncertainty, separate from edge geometry.
+The editor stores JSON documents in ignored `data/review/reviews.sqlite3`, keyed by original image and mask hashes. Each document has the source contour, refined proposal, editable visible contour, algorithm parameters and rejection flags, reviewer, and per-strip crossing, confidence, uncertainty and disposition. Drafts use ETags to prevent stale overwrites; approval inserts an immutable revision. The edited contour is the mask source; its deterministic source-resolution raster is available from the approved-revision mask endpoint, while the original imported mask remains linked evidence. The first pilot supports one visible-edge crossing per strip; broader no-edge, paired-edge and physical review workflows are future work. Physical measurements remain separate from edge geometry.
 
-The conversion to benchmark `Sample` must be deterministic and versioned: intersect approved source-frame geometry with the declared strip, order crossings, reject ambiguous multiple crossings, then write scan-distance positions. Link each projected task to the immutable annotation revision and transform. A proposal can have a model name/version/checkpoint digest, prompts, score, and source-mask ID, but only an approved revision can enter the frozen test set. The editor may display the projection alongside the original geometry, yet the source document remains authoritative.
+Approval validates exactly one contour crossing on each approved strip and checks that the reviewer-marked crossing agrees with it within the stated uncertainty (at least a two-pixel editing allowance). Ambiguous tasks can be explicitly excluded. Export reads only the latest approved revision per image, creates deterministic `Sample` JSONL under `data/review/`, and links the revision ID and hash in provenance. The app hides baseline predictions until approval to limit anchoring. A future model adapter may populate proposals but cannot approve them.
 
 The adapter for visual-anomaly-lab documents must account for its pixel-edge coordinates: an edge-frame coordinate `(x,y)` becomes CaliperBench pixel-center coordinate `(x-0.5,y-0.5)` before strip intersection. Do not apply that shift to a record already expressed in pixel-center coordinates. Prove alignment at several zooms, on non-square images and at borders. Preserve the original source file and its convention in provenance.
 

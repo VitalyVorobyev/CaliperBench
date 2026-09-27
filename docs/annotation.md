@@ -11,11 +11,12 @@ precision references.
 2. Define visible edge semantics: which material boundary, which side, and whether
    the target is a silhouette or an intensity transition. Exclude ambiguous edges
    from high-confidence localization; retain them as a labeled robustness stratum.
-3. Two annotators independently mark native-resolution boundaries at high zoom,
-   without viewing evaluated detector outputs. Record both labels and disagreement.
-   Adjudicate with a third review when needed. Store original polylines/points,
-   annotator IDs, version and uncertainty locally; publish derived metadata only
-   after checking whether its source license imposes derivative restrictions.
+3. For the first weld pilot, one reviewer edits the visible contour at high zoom,
+   without viewing detector outputs, then approves or excludes each crossing and assigns
+   uncertainty. Record the source mask, classical proposal, reviewed contour, reviewer,
+   revision and uncertainty locally. One review cannot measure inter-reviewer agreement;
+   any later agreement claim requires independent duplicate annotations. Check source
+   terms before publishing derived metadata.
 4. Choose straight strips crossing locally near-straight boundaries. Declare whether
    the reference is the centerline intersection or a defined projected-profile
    transition. Curvature/tilt across a broad strip may make these different: narrow

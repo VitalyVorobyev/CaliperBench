@@ -59,6 +59,9 @@ def main():
     p = sub.add_parser("export")
     p.add_argument("annotations")
     p.add_argument("--output", required=True)
+    p = sub.add_parser("review-export")
+    p.add_argument("--data-root", default="data")
+    p.add_argument("--output", required=True)
     p = sub.add_parser("run")
     p.add_argument("requests")
     p.add_argument("--data-root", default="data")
@@ -108,6 +111,13 @@ def main():
         elif args.command == "export":
             samples = _read(args.annotations, Sample)
             _write(args.output, [s.request.model_dump() for s in samples])
+        elif args.command == "review-export":
+            from .review import ReviewStore
+
+            repository = Path(__file__).resolve().parents[2]
+            samples = ReviewStore(repository, Path(args.data_root)).export_samples()
+            _write(args.output, [sample.model_dump() for sample in samples])
+            print(f"exported {len(samples)} approved samples")
         elif args.command == "run":
             predictions = []
             for request in _read(args.requests, Request):

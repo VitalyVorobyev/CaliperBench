@@ -1,0 +1,11 @@
+{
+  "status": "exploratory_mask_proxy_not_ground_truth",
+  "dataset": "weld-profiles-2026",
+  "tasks": 185,
+  "tolerance_px": 1,
+  "methods": {
+    "gradient_integer": { "mae_px": 1.046, "bias_px": -0.478, "error_over_tolerance_rate": 0.341, "median_runtime_ms": 0.152 },
+    "gradient_parabolic": { "mae_px": 0.966, "bias_px": -0.448, "error_over_tolerance_rate": 0.341, "median_runtime_ms": 0.149 },
+    "midpoint_crossing": { "mae_px": 0.964, "bias_px": -0.541, "error_over_tolerance_rate": 0.373, "median_runtime_ms": 0.153 }
+  }
+}

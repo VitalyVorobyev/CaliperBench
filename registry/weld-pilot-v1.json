@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "source": "https://doi.org/10.5281/zenodo.20301441",
+  "selection": "extrema plus farthest-point sampling of brightness, contrast, Laplacian variance, and source-mask boundary contrast",
+  "images": [
+    {
+      "image": "2.jpg",
+      "mask": "2_mask.png",
+      "image_sha256": "90e6f71e828945b5fbd9fff625d8727baa58c5ac1916623937dd14fe787140f2",
+      "mask_sha256": "8f02cea8b84c1b81b9b6b91844a67b943725f603beff04dbabe4f78203161ab6",
+      "features": [
+        0.3529673585580065,
+        0.29043695800508473,
+        0.023600049360021788,
+        0.19215686274509805
+      ]
+    },
+    {
+      "image": "4c8ds4c8ds78c.jpg",
+      "mask": "4c8ds4c8ds78c_mask.png",
+      "image_sha256": "88ea5a8dd5dea1cc7e8304d38807a96188b851e19e27887330d3e85d6f21a603",
+      "mask_sha256": "0301f603366cde192a40216a2d62f62a3eb832c9477c277e44864d47d2ee8821",
+      "features": [
+        0.2790414496527778,
+        0.3477898583567031,
+        0.005510802135396642,
+        0.19999999999999996
+      ]
+    },
+    {
+      "image": "4g5n4fg5nfdds.jpg",
+      "mask": "4g5n4fg5nfdds_mask.png",
+      "image_sha256": "ba5898c1eb1a7ccb4c6a5dd8e34bcbb45adc9cfdf351273b863e9a7a5151dc18",
+      "mask_sha256": "2e62c85791c20badbe0ba9f630004df950d785036d5ce36e8ed16e4c1a0b7e5a",
+      "features": [
+        0.1983989098243464,
+        0.2931766173361365,
+        0.004684671760861207,
+        0.10588235294117643
+      ]
+    },
+    {
+      "image": "5EF69E0890W64G69.jpg",
+      "mask": "5EF69E0890W64G69_mask.png",
+      "image_sha256": "71f1303b41d000783b323546e302f2a062d7167c77038dd3743d9c674c403598",
+      "mask_sha256": "2233b845cc29e075c15dc7793dcf2387cfe708c3f718132b511c49351c15fc17",
+      "features": [
+        0.25539851409313724,
+        0.3516078938499991,
+        0.011442961941721135,
+        0.13725490196078438
+      ]
+    },
+    {
+      "image": "5F4G54SDF5H04SR05S4RYH.jpg",
+      "mask": "5F4G54SDF5H04SR05S4RYH_mask.png",
+      "image_sha256": "de901c395b0a5ce3c311f8ffaac8bbe997a0ca742652f5ce0c66c99ff3bca679",
+      "mask_sha256": "2c5ee2180c211b073832e771c9a511820365f833ca9898d2307543f1b2c3e6ed",
+      "features": [
+        0.22355166207107843,
+        0.26842029802997686,
+        0.012561383742631039,
+        0.2411764705882353
+      ]
+    },
+    {
+      "image": "5FGB65GB65DG6.jpg",
+      "mask": "5FGB65GB65DG6_mask.png",
+      "image_sha256": "f85b15b8b5451ef36fcabda91f9ed9cfd8d4144cdca962894771713b24cf77aa",
+      "mask_sha256": "c977f4b71de2730bbc220d6e9e70326dc1570a61344fd26b311e5254946ef0c6",
+      "features": [
+        0.1508878165849673,
+        0.20594364347043226,
+        0.0076240370290272955,
+        0.10588235294117646
+      ]
+    },
+    {
+      "image": "5G09EG8BE09H8E0H.jpg",
+      "mask": "5G09EG8BE09H8E0H_mask.png",
+      "image_sha256": "cee3d6d01cfe3b41e7754a71342de4d616da172ffabd473f82ea505c27e1e93a",
+      "mask_sha256": "cfff5b52ffed69b3ff079f97b0d999e8c2e0699f960c7c9dbe5ba99023c701d9",
+      "features": [
+        0.14386711090686272,
+        0.23747742739183442,
+        0.008781165597366398,
+        0.21176470588235297
+      ]
+    },
+    {
+      "image": "5GR650GREG5ER90HWR90HW9EH4W.jpg",
+      "mask": "5GR650GREG5ER90HWR90HW9EH4W_mask.png",
+      "image_sha256": "c1a0d9843385f6d03365b786c17f37786da2c8fa7cb22151d747e52b212435eb",
+      "mask_sha256": "4ca7ccc15289821a89cad8f316307b9cc76b668fd6cb4d090a2c340296bbbfa3",
+      "features": [
+        0.24573944291258168,
+        0.3240172844734269,
+        0.014963416214116367,
+        0.24117647058823533
+      ]
+    },
+    {
+      "image": "5f4vf5vf4vf.jpg",
+      "mask": "5f4vf5vf4vf_mask.png",
+      "image_sha256": "53eef694e8438eed0983b8f947dae2c52db6793af72df1cae746fb97c1e0f57a",
+      "mask_sha256": "1390e53c5dd4889e0efba38a085f0644c7219530d7dbf7098285398705d460e4",
+      "features": [
+        0.1920932138480392,
+        0.26810882507242373,
+        0.017572580658080223,
+        0.16274509803921566
+      ]
+    },
+    {
+      "image": "5g6nb5d6b5db5d.jpg",
+      "mask": "5g6nb5d6b5db5d_mask.png",
+      "image_sha256": "bbc3b772706ba3da40df5fe1d961ce5159daee63777149ff6866bbedbc697f77",
+      "mask_sha256": "f131bb552c7f7e37dc4e08571066d43736e4cd3b898c7b790d7f12becd25e8fc",
+      "features": [
+        0.19435343903186275,
+        0.23678525239707768,
+        0.013612614238914522,
+        0.08431372549019608
+      ]
+    },
+    {
+      "image": "5s6d5ds65dsddsfhj.jpg",
+      "mask": "5s6d5ds65dsddsfhj_mask.png",
+      "image_sha256": "dc821f04831adc039e1ae0bc641fdbea4a3b3e800f8ea5c8f1469446132c4503",
+      "mask_sha256": "992b8f581e2abe0c2d801b3d383e9b57b6d5eaccde8398cf709402a70edf4fa1",
+      "features": [
+        0.2422718418096405,
+        0.30562421748654767,
+        0.024725888280148663,
+        0.28823529411764715
+      ]
+    },
+    {
+      "image": "5sd45sd4vsd5v4svs5dvsdv3.jpg",
+      "mask": "5sd45sd4vsd5v4svs5dvsdv3_mask.png",
+      "image_sha256": "d09e9a6c564b04345731976d962c08803861f3f204095c7931dd6b2e0f87efa1",
+      "mask_sha256": "5f1c5259a470e3045e06fc6e634d4b36710e877fc8f4805fec61bbc5f070def1",
+      "features": [
+        0.22005412581699346,
+        0.2991695743787908,
+        0.0037749289135588873,
+        0.2019607843137255
+      ]
+    }
+  ]
+}

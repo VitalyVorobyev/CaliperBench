@@ -1,0 +1,117 @@
+import io
+import json
+
+import numpy as np
+import pytest
+from PIL import Image
+
+from caliperbench.data import sha256
+from caliperbench.refine import propose, strip_crossings
+from caliperbench.review import Conflict, ReviewStore
+from caliperbench.schema import EdgeTruth, Provenance, Request, Sample, Strip
+
+
+def test_classical_refinement_is_deterministic_and_flagged():
+    image = np.zeros((36, 40), dtype=float)
+    image[10:28, 9:31] = 0.8
+    mask = np.zeros_like(image, dtype=bool)
+    mask[11:27, 10:30] = True
+    first = propose(image, mask)
+    second = propose(image, mask)
+    assert first == second
+    assert first.parameters["method"] == "skimage-active-contour-v3"
+    assert len(first.source_contour) >= 3
+    assert len(first.refined_contour) == len(first.source_contour)
+
+
+def test_crossing_rejects_ambiguous_geometry():
+    square = [[2, 2], [8, 2], [8, 8], [2, 8]]
+    assert strip_crossings(square, (5, 0), (5, 10)) == [2.0, 8.0]
+    assert strip_crossings(square, (5, 0), (5, 4)) == [2.0]
+    assert strip_crossings(square, (12, 0), (12, 10)) == []
+
+
+def test_review_revisions_conflicts_and_export(tmp_path):
+    repository = tmp_path / "repo"
+    data = tmp_path / "data"
+    (repository / "registry").mkdir(parents=True)
+    raw = data / "raw/weld-profiles-2026"
+    raw.mkdir(parents=True)
+    gray = np.zeros((36, 40), dtype=np.uint8)
+    gray[10:28, 9:31] = 200
+    mask = np.zeros_like(gray)
+    mask[11:27, 10:30] = 255
+    image_path = raw / "demo.jpg"
+    mask_path = raw / "demo_mask.png"
+    Image.fromarray(gray).save(image_path)
+    Image.fromarray(mask).save(mask_path)
+    image_sha = sha256(image_path)
+    mask_sha = sha256(mask_path)
+    pilot = {
+        "images": [
+            {
+                "image": image_path.name,
+                "mask": mask_path.name,
+                "image_sha256": image_sha,
+                "mask_sha256": mask_sha,
+            }
+        ]
+    }
+    (repository / "registry/weld-pilot-v1.json").write_text(json.dumps(pilot))
+    request = Request(
+        sample_id="demo:top",
+        image="raw/weld-profiles-2026/demo.jpg",
+        image_sha256=image_sha,
+        strip=Strip(start_xy=(20, 5), end_xy=(20, 15), samples=11),
+        polarities=["either"],
+    )
+    sample = Sample(
+        request=request,
+        split="development",
+        provenance=Provenance(
+            dataset_id="demo",
+            source_url="https://example.org",
+            source_version="1",
+            license="CC-BY-4.0",
+            source_image_id="demo.jpg",
+            annotator="proxy",
+            annotation_version="proxy",
+            derivation="source mask",
+            group_id="demo",
+        ),
+        edge_truth=EdgeTruth(
+            positions_px=[5.5], uncertainty_px=1, method="proxy", confidence="low"
+        ),
+    )
+    (data / "annotations_weld_proxy.jsonl").write_text(sample.model_dump_json() + "\n")
+    store = ReviewStore(repository, data)
+    document, etag = store.read("demo")
+    assert store.export_samples() == []
+    assert document.tasks[0].disposition == "pending"
+    document.proposal_flags.append("tampered")
+    with pytest.raises(ValueError, match="evidence"):
+        store.save("demo", document, etag)
+    document.proposal_flags.pop()
+    with pytest.raises(ValueError, match="reviewer"):
+        store.approve("demo", etag)
+    document.reviewer = "pilot-reviewer"
+    document.contour_reviewed = True
+    document.tasks[0].disposition = "approved"
+    document.tasks[0].uncertainty_px = 1.0
+    document.tasks[0].crossing_px = strip_crossings(document.contour, (20, 5), (20, 15))[0]
+    next_etag = store.save("demo", document, etag)
+    with pytest.raises(Conflict):
+        store.save("demo", document, etag)
+    revision = store.approve("demo", next_etag)
+    assert revision["revision_id"] == 1
+    assert len(revision["mask_sha256"]) == 64
+    raster = np.asarray(
+        Image.open(io.BytesIO(store.render_mask("demo", store.revision("demo", 1))))
+    )
+    assert raster.shape == (36, 40)
+    assert raster[20, 20] == 255
+    assert raster[0, 0] == 0
+    assert store.export_samples()[0].edge_truth.method == "single-reviewer-visible-edge"
+    document.reviewer = "second-reviewer"
+    store.save("demo", document, next_etag)
+    assert store.latest("demo")[1].reviewer == "pilot-reviewer"

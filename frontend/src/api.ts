@@ -1,0 +1,115 @@
+export type Point = [number, number];
+export type TaskReview = {
+  sample_id: string;
+  disposition: "pending" | "approved" | "excluded";
+  crossing_px: number | null;
+  uncertainty_px: number | null;
+  confidence: "high" | "medium" | "low";
+  note: string;
+};
+export type ReviewDocument = {
+  schema_version: 1;
+  image_id: string;
+  source_image_sha256: string;
+  source_mask_sha256: string;
+  coordinate_system: "pixel-center";
+  proposal_method: string;
+  proposal_parameters: Record<string, unknown>;
+  proposal_flags: string[];
+  source_contour: Point[];
+  proposed_contour: Point[];
+  contour: Point[];
+  contour_reviewed: boolean;
+  tasks: TaskReview[];
+  reviewer: string;
+};
+export type ImageRow = {
+  id: string;
+  name: string;
+  task_count: number;
+  reviewed: boolean;
+  image_url: string;
+};
+export type Request = {
+  sample_id: string;
+  strip: { start_xy: Point; end_xy: Point; width_px: number; samples: number };
+  polarities: string[];
+};
+export type Workspace = {
+  document: ReviewDocument;
+  etag: string;
+  width: number;
+  height: number;
+  requests: Record<string, Request>;
+  latest_revision: number | null;
+};
+export type Prediction = {
+  status: "ok" | "failed";
+  edges_px: number[];
+  runtime_ms: number;
+  reason: string | null;
+};
+export type Analysis = {
+  predictions: Record<string, Record<string, Prediction>>;
+  profiles: Record<string, number[]>;
+};
+export type MethodReport = {
+  n: number;
+  detection_failures: number;
+  error_over_1px: number;
+  failure_rate: number | null;
+  mae_px: number | null;
+  bias_px: number | null;
+  median_runtime_ms: number | null;
+};
+export type Report = {
+  reference: string;
+  images: number;
+  approved_tasks: number;
+  reviewer_uncertainty_px: {
+    mean: number | null;
+    min: number | null;
+    max: number | null;
+  };
+  methods: Record<string, MethodReport>;
+  mask_proxy_context: {
+    status: string;
+    tasks: number;
+    tolerance_px: number;
+    methods: Record<
+      string,
+      {
+        mae_px: number;
+        bias_px: number;
+        error_over_tolerance_rate: number;
+        median_runtime_ms: number;
+      }
+    >;
+  };
+};
+
+export async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok)
+    throw new Error(`${response.status}: ${await response.text()}`);
+  return response.json() as Promise<T>;
+}
+
+export async function sendJson<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  etag?: string,
+): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(etag ? { "If-Match": etag } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok)
+    throw new Error(`${response.status}: ${await response.text()}`);
+  return response.json() as Promise<T>;
+}

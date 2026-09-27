@@ -2,51 +2,42 @@
 
 ## Status
 
-The Python registry, local cache tooling, v1 benchmark JSONL, simple reference baseline, scorer, tests and CI are implemented. Ten real-data sources are registered. One local weld-profile pilot contains 49 verified real images and 185 low-confidence mask-proxy tasks; no human-adjudicated edge labels have been imported. There is no CaliperBench GUI, editor store, advanced-model adapter, or published benchmark split yet.
+The Python registry, cache tooling, v1 benchmark JSONL, three textbook baselines, scorer, tests and CI are implemented. Ten real-data sources are registered. The local weld collection has 49 verified images and 185 low-confidence mask-proxy tasks. A deterministic 12-image subset, classical contour proposals, a local React review app, SQLite drafts and immutable approvals are implemented. **No human-reviewed edge reference or published benchmark split exists yet.**
 
-The GUI will be a CaliperBench-specific React app. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) supplies a proven browser, annotation queue, zoom/pan, revision workflow, mask import, and MobileSAM-assisted draft interaction to study and reuse. [lab-ui](https://github.com/VitalyVorobyev/lab-ui) is the single source for reusable controls and canvas infrastructure: its split `@vitavision/ui`, `@vitavision/stage2d` and `@vitavision/charts` packages include `ImageStage`, image-coordinate transforms, measurement overlays and line profiles. CaliperBench owns its task-specific editor and data model. Do not introduce a competing generic canvas package.
+The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms`, `/charts`, and `/stage2d`; reusable contour interaction is contributed upstream to lab-ui. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) informed browsing and revision behavior. CaliperBench owns its review workflow, persistence and benchmark projection.
 
-## Phase 1 — Inspect and freeze a pilot source
+## Delivered — real-data pilot and review foundation
 
-**Outcome:** one legally usable, modest real-image pilot with a reproducible local manifest.
+The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance.
 
-- The weld-profile subset is acquired and verified; inspect its boundary semantics with independent reviewers. Add an apple subset for the physical track after exact object and measurement mapping is checked.
-- Add a source-specific conversion/inventory script after inspecting actual files. Assign group splits before creating tasks.
-- Publish a metadata-only pilot inventory and the reason for each inclusion/exclusion; retain image bytes locally.
+The local app browses images, displays source/refined/reviewed contours and masks, edits contour vertices and strip crossings, shows line profiles, autosaves drafts, detects conflicting saves and freezes approvals. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
 
-**Gate / stop condition:** every pilot image is traceable to a source version, license and SHA-256; missing dimensions/IDs are resolved or excluded. No precision claim comes from an imported mask alone.
+The current CI covers deterministic refinement, crossings, revision conflicts, approved-only export, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
 
-## Phase 2 — Annotation contract and GUI foundation
+## Next — human review and visual acceptance
 
-**Outcome:** a person can browse pilot images, define strips and edit/review source-frame geometry.
+Have one reviewer inspect all 12 images, edit the visible contour, approve or exclude every strip crossing, assign uncertainty and confidence, and freeze revisions. An external reviewer must still verify the app’s visual alignment and interaction quality at normal and high zoom, on a narrow window and with keyboard navigation. Record failures and any needed refinements before calling the pilot ready.
 
-- Specify and validate immutable annotation revisions, draft/proposal/approved states, reviewer identity, task projection and source-frame coordinate conversion. Keep physical truth separate.
-- Build a React app in this repo using `@vitavision/ui` and `@vitavision/stage2d` (`ImageStage`, `MeasureOverlay`, `LineProfile`). Reuse visual-anomaly-lab's proven queue, keyboard, zoom, undo/redo, autosave/conflict and revision patterns as design inputs. Move only general 2D interaction primitives upstream to lab-ui when both apps need them; keep caliper strip tools here.
-- Show image, source mask/proposal, editable visible edge geometry, strip, profile, projected crossings, uncertainty and provenance together. Support no-edge tasks, reject ambiguous crossings and display physical records without using them as edge labels.
-- Persist locally; no dataset images or unfinished drafts in Git. Export approved revisions to validated benchmark `Sample` JSONL.
+Compare approved references against all three existing baselines. Report edge MAE, bias, detection failures, runtime, reviewer-assigned uncertainty and image-group counts. Keep the 185 mask-proxy tasks as exploratory diagnostics, never substitute them for reviewed references. Do not report width/center or physical error until those truth tracks have real observations.
 
-**Gate / stop condition:** import/edit/save/reopen/export round-trips without coordinate drift, including non-square images, borders and high zoom. A complete revision cannot be silently overwritten and an unapproved proposal cannot reach the test set.
+**Gate:** user confirms overlay alignment, contour editing, review decisions and reproducible report on the 12 images. A one-reviewer pilot does not establish inter-reviewer agreement.
 
-## Phase 3 — Real-label pilot and quality study
+## Later — broaden truth tracks and supported app
 
-**Outcome:** a frozen pilot split with defensible edge and physical truth tracks.
+Add paired-edge tasks and calibrated physical datasets after source-object mapping is verified. Introduce independent duplicate review if a release requires measured annotation reliability; current uncertainty values are reviewer judgments. Extend the app to dataset-level review management and versioned migrations, test more screen sizes and accessibility states, and replace the small local contour adapter when the upstream lab-ui package releases its component.
 
-- Independently label a diverse pilot by two reviewers, adjudicate disagreements and measure uncertainty. Mark weak/occluded/ambiguous boundaries explicitly; include negative strips.
-- Link physical measurements to exact object, axis and acquisition session and verify calibration. Run controlled downsampling only for images whose source resolution and reference quality justify it. Group all derived variants in one split.
-- Review failures and biases by source, contrast, phase and uncertainty. Freeze annotation hashes, split IDs and task-generation version before the first published evaluation.
+Preserve an explicit visible-edge versus geometric-outline distinction for every new source. Controlled downsampling remains a separately labeled high-resolution-derived proxy track, with transforms and uncertainty recorded.
 
-**Gate / stop condition:** agreement and error bounds are reported with sample counts; every scored edge has a reviewed source-frame reference; physical reports exclude unresolved object mappings.
+**Gate:** each published score uses an approved reference or matched physical measurement, plus source license and immutable derivation.
 
-## Phase 4 — Assisted proposals, then broader curation
+## Later — model-assisted proposals
 
 **Outcome:** faster labeling without changing who decides ground truth.
 
-- First evaluate the existing visual-anomaly-lab MobileSAM prompt-guided and bounded automatic-prompt-grid mask workflows on a held-out labeling pilot. Its proposed contours are editable drafts, not subpixel labels. Also test deterministic mask contours and the public reference baseline as low-cost candidate generators.
+- Measure reviewer time and correction distance on the classical pilot first. Then evaluate visual-anomaly-lab's MobileSAM proposal workflow or another openly licensed model on a held-out labeling set. Its outputs remain editable drafts, not subpixel labels.
 - If those fail, evaluate a public, openly licensed segmentation or boundary model as an optional local adapter. Pin model license, version/checkpoint digest, prompts, inference settings, runtime and proposal confidence. Keep weights out of Git. Use the same reviewer flow for every source and prevent evaluation-set training leakage.
 - Measure accepted-proposal rate, reviewer time, correction distance, missed/false edges and disagreement against a manually labeled set. Add sources only after provenance and rights checks.
 
 **Gate / stop condition:** assisted labeling saves review time at no worse final agreement, and no proposal bypasses human approval. Model scores are not declared ground truth uncertainty.
 
-## Dependencies and open decisions
-
-Phase 2 depends on a real pilot in Phase 1 and a stable editor document. Phase 3 depends on an end-to-end GUI and two independent reviewers. Phase 4 depends on a manual reference set; selecting an advanced model earlier would let its errors define the target. The first pilot source and release license for derived annotations are chosen only after archive/rights inspection. The exact app shell (web-only versus desktop wrapper) remains open; the React canvas, local-only data boundary and interchange do not depend on that choice. Prefer a local web app for the first pilot unless image access or deployment constraints require a wrapper.
+The pilot is a local web app. A desktop wrapper is a distribution choice for a later release, not a prerequisite for reviewing the initial real-image set.

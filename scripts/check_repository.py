@@ -4,7 +4,21 @@ import re
 import subprocess
 from pathlib import PurePosixPath
 
-ALLOWED = {".py", ".md", ".json", ".jsonl", ".toml", ".lock", ".yml", ".yaml", ".txt"}
+ALLOWED = {
+    ".py",
+    ".md",
+    ".json",
+    ".jsonl",
+    ".toml",
+    ".lock",
+    ".yml",
+    ".yaml",
+    ".txt",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".html",
+}
 SPECIAL = {"LICENSE", ".gitignore", ".gitattributes", ".githooks/pre-commit"}
 FORBIDDEN = {
     "data",

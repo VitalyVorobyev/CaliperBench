@@ -68,4 +68,6 @@ __pycache__/
 htmlcov/
 build/
 dist/
+node_modules/
+.vite/
 .DS_Store

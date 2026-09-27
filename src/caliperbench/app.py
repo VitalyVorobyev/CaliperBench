@@ -1,0 +1,182 @@
+"""Local-only review API. Run with `uv run uvicorn caliperbench.app:app`."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
+from PIL import Image
+from pydantic import BaseModel
+
+from .review import Conflict, ReviewDocument, ReviewStore
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+DATA_ROOT = Path(os.environ.get("CALIPERBENCH_DATA_ROOT", REPOSITORY / "data")).resolve()
+store = ReviewStore(REPOSITORY, DATA_ROOT)
+app = FastAPI(title="CaliperBench local review", version="0.1.0")
+
+
+@app.get("/api/images")
+def images():
+    result = []
+    for image_id, row in store.assets.items():
+        latest = store.latest(image_id)
+        result.append(
+            {
+                "id": image_id,
+                "name": row["image"],
+                "task_count": len(store.samples.get(image_id, [])),
+                "reviewed": latest is not None,
+                "image_url": f"/api/images/{image_id}/source",
+            }
+        )
+    return result
+
+
+@app.get("/api/images/{image_id}/source")
+def source(image_id: str):
+    try:
+        store.source_verified(image_id)
+        return FileResponse(store.image_path(image_id), media_type="image/jpeg")
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+
+
+@app.get("/api/images/{image_id}/mask")
+def mask(image_id: str):
+    try:
+        store.source_verified(image_id)
+        return FileResponse(store.mask_path(image_id), media_type="image/png")
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+
+
+@app.get("/api/images/{image_id}/workspace")
+def workspace(image_id: str):
+    try:
+        doc, etag = store.read(image_id)
+        with Image.open(store.image_path(image_id)) as image:
+            width, height = image.size
+        return {
+            "document": doc,
+            "etag": etag,
+            "width": width,
+            "height": height,
+            "requests": {
+                s.request.sample_id: s.request.model_dump() for s in store.samples.get(image_id, [])
+            },
+            "latest_revision": store.latest(image_id)[0] if store.latest(image_id) else None,
+        }
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+
+
+@app.put("/api/images/{image_id}/draft")
+def save_draft(image_id: str, document: ReviewDocument, if_match: str = Header(...)):
+    try:
+        return {"etag": store.save(image_id, document, if_match)}
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+    except Conflict as exc:
+        raise HTTPException(409, str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@app.post("/api/images/{image_id}/approve")
+def approve(image_id: str, if_match: str = Header(...)):
+    try:
+        return store.approve(image_id, if_match)
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+    except Conflict as exc:
+        raise HTTPException(409, str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@app.get("/api/images/{image_id}/analysis")
+def analysis(image_id: str):
+    try:
+        return store.predictions(image_id)
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+
+
+@app.get("/api/images/{image_id}/revisions/{revision_id}/mask")
+def reviewed_mask(image_id: str, revision_id: int):
+    try:
+        document = store.revision(image_id, revision_id)
+        return Response(store.render_mask(image_id, document), media_type="image/png")
+    except KeyError:
+        raise HTTPException(404, "unknown approved revision") from None
+
+
+@app.get("/api/report")
+def report():
+    samples = store.export_samples()
+    by_image = {}
+    for sample in samples:
+        image_id = Path(sample.request.image).stem
+        by_image.setdefault(image_id, []).append(sample)
+    methods = {}
+    uncertainties = [sample.edge_truth.uncertainty_px for sample in samples]
+    for method in ("gradient_integer", "gradient_parabolic", "midpoint_crossing"):
+        errors = []
+        detection_failures = 0
+        runtimes = []
+        for image_id, group in by_image.items():
+            predictions = store.predictions(image_id)["predictions"]
+            for sample in group:
+                prediction = predictions[sample.request.sample_id][method]
+                runtimes.append(prediction["runtime_ms"])
+                if prediction["status"] != "ok" or len(prediction["edges_px"]) != 1:
+                    detection_failures += 1
+                else:
+                    errors.append(prediction["edges_px"][0] - sample.edge_truth.positions_px[0])
+        over_tolerance = detection_failures + sum(abs(error) > 1 for error in errors)
+        methods[method] = {
+            "n": len(errors),
+            "detection_failures": detection_failures,
+            "error_over_1px": over_tolerance,
+            "failure_rate": over_tolerance / len(samples) if samples else None,
+            "mae_px": sum(abs(x) for x in errors) / len(errors) if errors else None,
+            "bias_px": sum(errors) / len(errors) if errors else None,
+            "median_runtime_ms": sorted(runtimes)[len(runtimes) // 2] if runtimes else None,
+        }
+    proxy = json.loads((REPOSITORY / "registry/weld-mask-proxy-summary.json").read_text())
+    return {
+        "reference": "single-reviewer-visible-edge",
+        "images": len(by_image),
+        "approved_tasks": len(samples),
+        "reviewer_uncertainty_px": {
+            "mean": sum(uncertainties) / len(uncertainties) if uncertainties else None,
+            "min": min(uncertainties) if uncertainties else None,
+            "max": max(uncertainties) if uncertainties else None,
+        },
+        "methods": methods,
+        "mask_proxy_context": proxy,
+    }
+
+
+class ExportResponse(BaseModel):
+    count: int
+    path: str
+
+
+@app.post("/api/export", response_model=ExportResponse)
+def export():
+    samples = store.export_samples()
+    destination = DATA_ROOT / "review" / "approved_samples.jsonl"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("".join(sample.model_dump_json() + "\n" for sample in samples))
+    return ExportResponse(count=len(samples), path=str(destination))
+
+
+frontend = REPOSITORY / "frontend/dist"
+if frontend.is_dir():
+    app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
