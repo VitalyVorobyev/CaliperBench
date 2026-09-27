@@ -4,7 +4,7 @@
 
 The Python registry, cache tooling, v1 benchmark JSONL, three textbook baselines, scorer, tests and CI are implemented. Ten real-data sources are registered. The local weld collection has 49 verified images and 185 low-confidence mask-proxy tasks. A deterministic 12-image subset, classical contour proposals, a local React review app, SQLite drafts and immutable approvals are implemented. **No human-reviewed edge reference or published benchmark split exists yet.**
 
-The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms`, `/charts`, and `/stage2d`; reusable contour interaction is contributed upstream to lab-ui. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) informed browsing and revision behavior. CaliperBench owns its review workflow, persistence and benchmark projection.
+The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms`, `/charts`, and `/stage2d`; reusable contour and raster-mask interaction is proposed upstream in [lab-ui PR #36](https://github.com/VitalyVorobyev/lab-ui/pull/36). The current app edits contour-derived masks; freehand raster painting remains an optional later workflow. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) informed browsing and revision behavior. CaliperBench owns its review workflow, persistence and benchmark projection.
 
 ## Delivered — real-data pilot and review foundation
 
