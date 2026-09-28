@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Check,
+  ChartLine,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Image as ImageIcon,
+  Layers,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
   RotateCcw,
   RotateCw,
   Save,
@@ -16,6 +30,9 @@ import {
   NumberInput,
   Select,
   Switch,
+  Tabs,
+  Tooltip,
+  TooltipProvider,
 } from "@vitavision/ui";
 import { describeFields, SchemaForm, type RawValues } from "@vitavision/forms";
 import { LineProfile } from "@vitavision/charts";
@@ -105,6 +122,78 @@ function ContourDisplay({
   );
 }
 
+function StripOverview({
+  workspace,
+  selectedIndex,
+  onSelect,
+}: {
+  workspace: Workspace;
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const stage = useStage();
+  return (
+    <svg
+      viewBox={imageViewBox(stage.image)}
+      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+      aria-hidden="true"
+    >
+      {workspace.document.tasks.map((item, index) => {
+        const strip = workspace.requests[item.sample_id]?.strip;
+        if (!strip) return null;
+        return (
+          <line
+            key={item.sample_id}
+            x1={strip.start_xy[0]}
+            y1={strip.start_xy[1]}
+            x2={strip.end_xy[0]}
+            y2={strip.end_xy[1]}
+            stroke="var(--probe)"
+            strokeOpacity={index === selectedIndex ? 1 : 0.85}
+            strokeWidth={stage.imageLength(index === selectedIndex ? 2.5 : 1.6)}
+            className="pointer-events-auto cursor-pointer"
+            onPointerDown={(event) => {
+              if (!stage.panMode) event.stopPropagation();
+            }}
+            onClick={(event) => {
+              if (stage.panMode) return;
+              event.stopPropagation();
+              onSelect(index);
+            }}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function LayerTool({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className="cb-tool"
+        aria-label={label}
+        aria-pressed={active}
+        data-active={active}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
 function StageContent({
   workspace,
   task,
@@ -112,6 +201,8 @@ function StageContent({
   showReviewedMask,
   showOriginal,
   showProposal,
+  showAllStrips,
+  onSelectTask,
   editContour,
   onContourChange,
   onContourStart,
@@ -124,6 +215,8 @@ function StageContent({
   showReviewedMask: boolean;
   showOriginal: boolean;
   showProposal: boolean;
+  showAllStrips: boolean;
+  onSelectTask: (index: number) => void;
   editContour: boolean;
   onContourChange: (points: Point[]) => void;
   onContourStart: () => void;
@@ -131,6 +224,13 @@ function StageContent({
   analysis: Analysis | null;
 }) {
   const stage = useStage();
+  const fitted = useRef(false);
+  useEffect(() => {
+    if (!fitted.current && stage.box.width > 0 && stage.box.height > 0) {
+      fitted.current = true;
+      stage.fit();
+    }
+  }, [stage.box.width, stage.box.height, stage.fit]);
   const imageId = workspace.document.image_id;
   const request = task ? workspace.requests[task.sample_id] : undefined;
   const primitives: MeasurePrimitive[] = [];
@@ -179,6 +279,7 @@ function StageContent({
         alt={`Weld profile ${imageId}`}
         draggable={false}
         className="cb-overlay-img"
+        style={{ imageRendering: stage.view.scale >= 4 ? "pixelated" : "auto" }}
       />
       {showMask && (
         <img
@@ -186,7 +287,11 @@ function StageContent({
           alt=""
           draggable={false}
           className="cb-overlay-img"
-          style={{ opacity: 0.28, mixBlendMode: "screen" }}
+          style={{
+            opacity: 0.28,
+            mixBlendMode: "screen",
+            imageRendering: "pixelated",
+          }}
         />
       )}
       {showOriginal && (
@@ -208,6 +313,15 @@ function StageContent({
           points={workspace.document.contour}
           color="var(--signal)"
           fill
+        />
+      )}
+      {showAllStrips && (
+        <StripOverview
+          workspace={workspace}
+          selectedIndex={workspace.document.tasks.findIndex(
+            (item) => item.sample_id === task?.sample_id,
+          )}
+          onSelect={onSelectTask}
         />
       )}
       <ContourLayer
@@ -243,6 +357,12 @@ export function App() {
   const [showReviewedMask, setShowReviewedMask] = useState(false);
   const [showOriginal, setShowOriginal] = useState(true);
   const [showProposal, setShowProposal] = useState(true);
+  const [showAllStrips, setShowAllStrips] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState<"review" | "settings">(
+    "review",
+  );
   const [showResults, setShowResults] = useState(false);
   const [resultsUnlocked, setResultsUnlocked] = useState(false);
   const [reviewValues, setReviewValues] = useState<RawValues>({
@@ -509,505 +629,654 @@ export function App() {
   };
 
   return (
-    <div className="cb-shell">
-      <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4">
-        <div className="flex items-center gap-2">
-          <ScanLine className="h-5 w-5 text-signal" aria-hidden />
-          <strong className="text-sm tracking-tight">CaliperBench</strong>
-          <span className="text-xs text-fg-muted">/ Review studio</span>
-        </div>
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className={`cb-status truncate ${error ? "cb-error" : ""}`}
-            role="status"
-          >
-            {error || status}
-          </span>
-          <Button
-            size="sm"
-            icon={<Save />}
-            disabled={!dirty}
-            onClick={() => void saveNow().catch(() => undefined)}
-          >
-            Save draft
-          </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Check />}
-            disabled={!canApproveReview(document)}
-            onClick={() => void approve()}
-          >
-            Approve revision
-          </Button>
-        </div>
-      </header>
-      <main className="cb-main">
-        <aside className="cb-sidebar" aria-label="Pilot images">
-          <div className="cb-section">
-            <p className="cb-label">Weld pilot · 12 images</p>
-            <p className="mt-2 text-xs text-fg-muted">
-              Real images, source masks and classical contour proposals.
-              Approval is per image and crossing.
-            </p>
+    <TooltipProvider>
+      <div className="cb-shell">
+        <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4">
+          <div className="flex items-center gap-2">
+            <ScanLine className="h-5 w-5 text-signal" aria-hidden />
+            <strong className="text-sm tracking-tight">CaliperBench</strong>
+            <span className="text-xs text-fg-muted">/ Review studio</span>
           </div>
-          {images.map((row) => (
-            <button
-              key={row.id}
-              className="cb-file"
-              data-active={row.id === selected}
-              onClick={() => void navigate(row.id)}
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className={`cb-status truncate ${error ? "cb-error" : ""}`}
+              role="status"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">{row.name}</span>
-                <span
-                  className={row.reviewed ? "text-normal" : "text-fg-subtle"}
-                  aria-label={row.reviewed ? "Reviewed" : "Unreviewed"}
-                >
-                  {row.reviewed ? "✓" : "○"}
-                </span>
-              </div>
-              <span className="text-xs text-fg-muted">
-                {row.task_count} strips
-              </span>
-            </button>
-          ))}
-          <div className="cb-section">
-            <p className="cb-label">Reviewed reference</p>
-            <p className="mt-1 text-sm">
-              {report?.images ?? 0} / {images.length} images
-            </p>
-            <p className="text-xs text-fg-muted">
-              {report?.approved_tasks ?? 0} approved crossings
-            </p>
+              {error || status}
+            </span>
             <Button
               size="sm"
-              className="mt-3"
-              onClick={() => void exportApproved()}
+              icon={<Save />}
+              disabled={!dirty}
+              onClick={() => void saveNow().catch(() => undefined)}
             >
-              Export JSONL
+              Save draft
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Check />}
+              disabled={!canApproveReview(document)}
+              onClick={() => void approve()}
+            >
+              Approve revision
             </Button>
           </div>
-        </aside>
-        <section className="cb-stage" aria-label="Image and measurements">
-          <div className="cb-stage-frame">
-            {workspace && document ? (
-              <ImageStage
-                image={{ width: workspace.width, height: workspace.height }}
-                view={view}
-                onView={setView}
-                label="Weld image review canvas"
-                toolbar={<StageToolbar />}
-                readout={<StageReadout cursor={null} />}
-                panKeys={!editContour}
+        </header>
+        <main className="cb-main" data-sidebar-open={sidebarOpen}>
+          <aside
+            className="cb-sidebar"
+            aria-label="Pilot images"
+            data-open={sidebarOpen}
+          >
+            <div className="cb-sidebar-top">
+              {sidebarOpen && (
+                <div>
+                  <p className="cb-label">Weld pilot</p>
+                  <p className="text-xs text-fg-muted">
+                    {images.length} real images · {report?.images ?? 0} reviewed
+                  </p>
+                </div>
+              )}
+              <Tooltip
+                content={
+                  sidebarOpen
+                    ? "Collapse image browser"
+                    : "Expand image browser"
+                }
               >
-                <StageContent
-                  workspace={{ ...workspace, document }}
-                  task={task}
-                  showMask={showMask}
-                  showReviewedMask={showReviewedMask}
-                  showOriginal={showOriginal}
-                  showProposal={showProposal}
-                  editContour={editContour}
-                  onContourStart={checkpoint}
-                  onContourChange={(points) =>
-                    update(
-                      { ...document, contour: points, contour_reviewed: false },
-                      false,
-                    )
+                <button
+                  type="button"
+                  className="cb-tool"
+                  aria-label={
+                    sidebarOpen
+                      ? "Collapse image browser"
+                      : "Expand image browser"
                   }
-                  showResults={showResults && resultsUnlocked}
-                  analysis={analysis}
-                />
-              </ImageStage>
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-white/70">
-                {status}
-              </div>
-            )}
-          </div>
-          <div className="cb-profile p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="cb-label">
-                Scan profile {task ? `· ${task.sample_id}` : ""}
-              </span>
-              <span className="cb-mini text-xs text-fg-muted">
-                {request ? `${stripLength(request).toFixed(1)} px` : ""}
-              </span>
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                >
+                  {sidebarOpen ? (
+                    <PanelLeftClose size={17} />
+                  ) : (
+                    <PanelLeftOpen size={17} />
+                  )}
+                </button>
+              </Tooltip>
             </div>
-            {profile && request ? (
-              <LineProfile
-                label={`Intensity profile for ${task?.sample_id}`}
-                series={[
-                  {
-                    name: "Grayscale intensity",
-                    points: profile.map((y, index) => ({
-                      x: (index * stripLength(request)) / (profile.length - 1),
-                      y,
-                    })),
-                  },
-                ]}
-                edges={marks}
-                xDomain={[0, stripLength(request)]}
-                yDomain={[0, 1]}
-                variant="wide"
-              />
-            ) : (
-              <p className="text-xs text-fg-muted">
-                Select a strip to inspect its image signal.
-              </p>
-            )}
-          </div>
-        </section>
-        <aside className="cb-inspector" aria-label="Review controls">
-          <div className="cb-section">
-            <p className="cb-label">
-              {selected ? `Image ${selected}` : "Select an image"}
-            </p>
-            <p className="mt-1 text-sm font-medium">Visible edge review</p>
-            <p className="mt-1 text-xs text-fg-muted">
-              Source mask → classical refinement → your contour and crossings.
-              Only an approved revision enters the benchmark.
-            </p>
-            {document?.proposal_flags.length ? (
-              <div className="mt-3 rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
-                Proposal flags: {document.proposal_flags.join(", ")}
-              </div>
-            ) : null}
-          </div>
-          {document && (
-            <>
-              <div className="cb-section space-y-3">
-                <p className="cb-label">Layers &amp; editing</p>
-                <Switch
-                  label="Source mask"
-                  checked={showMask}
-                  onCheckedChange={setShowMask}
-                />
-                <Switch
-                  label="Edited mask preview"
-                  checked={showReviewedMask}
-                  onCheckedChange={setShowReviewedMask}
-                />
-                <Switch
-                  label="Original mask contour"
-                  checked={showOriginal}
-                  onCheckedChange={setShowOriginal}
-                />
-                <Switch
-                  label="Refined proposal"
-                  checked={showProposal}
-                  onCheckedChange={setShowProposal}
-                />
-                <Switch
-                  label="Edit reviewed contour"
-                  checked={editContour}
-                  onCheckedChange={setEditContour}
-                />
-                <Checkbox
-                  label="I reviewed the visible contour"
-                  checked={document.contour_reviewed}
-                  onCheckedChange={(value) =>
-                    update({ ...document, contour_reviewed: value })
-                  }
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    icon={<RotateCcw />}
-                    disabled={!undo.current.length}
-                    onClick={() => restore("undo")}
-                  >
-                    Undo
-                  </Button>
-                  <Button
-                    size="sm"
-                    icon={<RotateCw />}
-                    disabled={!redo.current.length}
-                    onClick={() => restore("redo")}
-                  >
-                    Redo
-                  </Button>
-                </div>
-                <p className="text-xs text-fg-muted">
-                  Drag points, double click the outline to add one, or focus a
-                  point and use arrow keys. Shift + arrow moves 0.1 px.
-                </p>
-              </div>
-              <div className="cb-section">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="cb-label">Caliper strips</p>
-                  <span className="text-xs text-fg-muted">
-                    {taskIndex + 1} / {document.tasks.length}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {document.tasks.map((item, index) => (
+            {sidebarOpen && (
+              <>
+                <div
+                  className="cb-thumbnails"
+                  aria-label="Pilot image previews"
+                >
+                  {images.map((row) => (
                     <button
-                      key={item.sample_id}
-                      className={`rounded px-2 py-1 text-xs ${index === taskIndex ? "bg-signal text-signal-fg" : "bg-raised text-fg-muted"}`}
-                      onClick={() => setTaskIndex(index)}
-                      aria-label={`Strip ${index + 1}: ${item.disposition}`}
+                      key={row.id}
+                      type="button"
+                      className="cb-thumb"
+                      data-active={row.id === selected}
+                      onClick={() => void navigate(row.id)}
+                      aria-label={`${row.name}, ${row.reviewed ? "reviewed" : "unreviewed"}, ${row.task_count} strips`}
                     >
-                      {index + 1}
-                      {item.disposition === "approved"
-                        ? " ✓"
-                        : item.disposition === "excluded"
-                          ? " ×"
-                          : ""}
+                      <img src={row.image_url} alt="" loading="lazy" />
+                      <span className="cb-thumb-meta">
+                        <span className="truncate">{row.name}</span>
+                        <span
+                          className={
+                            row.reviewed ? "text-normal" : "text-fg-muted"
+                          }
+                        >
+                          {row.reviewed ? "✓" : `${row.task_count}`}
+                        </span>
+                      </span>
                     </button>
                   ))}
                 </div>
-                {task && request && (
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="cb-mini text-xs">{task.sample_id}</span>
-                      <Badge
-                        tone={
-                          task.disposition === "approved" ? "normal" : "neutral"
-                        }
-                      >
-                        {task.disposition}
-                      </Badge>
-                    </div>
-                    <label className="block text-xs font-medium">
-                      Reference crossing · scan distance (px)
-                      <NumberInput
-                        className="mt-1"
-                        value={task.crossing_px ?? ""}
-                        min={0}
-                        max={stripLength(request)}
-                        step="any"
-                        onChange={(e) =>
-                          setTask({
-                            crossing_px:
-                              e.target.value === ""
-                                ? null
-                                : Number(e.target.value),
-                            disposition: "pending",
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="block text-xs font-medium">
-                      Uncertainty (px)
-                      <NumberInput
-                        className="mt-1"
-                        value={task.uncertainty_px ?? ""}
-                        min={0.001}
-                        step="any"
-                        onChange={(e) =>
-                          setTask({
-                            uncertainty_px:
-                              e.target.value === ""
-                                ? null
-                                : Number(e.target.value),
-                            disposition: "pending",
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="block text-xs font-medium">
-                      Confidence
-                      <Select
-                        className="mt-1"
-                        value={task.confidence}
-                        onValueChange={(value) =>
-                          setTask({
-                            confidence: value as TaskReview["confidence"],
-                          })
-                        }
-                        options={[
-                          { value: "high", label: "High" },
-                          { value: "medium", label: "Medium" },
-                          { value: "low", label: "Low" },
-                        ]}
-                      />
-                    </label>
-                    <label className="block text-xs font-medium">
-                      Review note
-                      <Input
-                        className="mt-1"
-                        value={task.note}
-                        onChange={(e) => setTask({ note: e.target.value })}
-                      />
-                    </label>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        disabled={task.crossing_px === null}
-                        onClick={() =>
-                          setTask({
-                            disposition: "approved",
-                            uncertainty_px:
-                              task.uncertainty_px ??
-                              Number(reviewValues.default_uncertainty || 1),
-                          })
-                        }
-                      >
-                        Approve crossing
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          setTask({
-                            disposition: "excluded",
-                            note: task.note || "ambiguous_visible_edge",
-                          })
-                        }
-                      >
-                        Exclude
-                      </Button>
-                    </div>
-                    <div className="flex justify-between">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={<ChevronLeft />}
-                        disabled={taskIndex === 0}
-                        onClick={() => setTaskIndex((index) => index - 1)}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={<ChevronRight />}
-                        disabled={taskIndex === document.tasks.length - 1}
-                        onClick={() => setTaskIndex((index) => index + 1)}
-                      >
-                        Next
-                      </Button>
+                <div className="cb-sidebar-footer">
+                  <p className="cb-label">Current image</p>
+                  <p
+                    className="cb-mini truncate text-xs"
+                    title={images.find((row) => row.id === selected)?.name}
+                  >
+                    {images.find((row) => row.id === selected)?.name ?? "—"}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-fg-muted">
+                    <span>
+                      {report?.approved_tasks ?? 0} approved crossings
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void exportApproved()}
+                    >
+                      Export
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </aside>
+          <section className="cb-stage" aria-label="Image and measurements">
+            <div className="cb-stage-frame">
+              {workspace && document ? (
+                <ImageStage
+                  image={{ width: workspace.width, height: workspace.height }}
+                  view={view}
+                  onView={setView}
+                  label="Weld image review canvas"
+                  toolbar={<StageToolbar />}
+                  readout={<StageReadout cursor={null} />}
+                  panKeys={!editContour}
+                >
+                  <StageContent
+                    workspace={{ ...workspace, document }}
+                    task={task}
+                    showMask={showMask}
+                    showReviewedMask={showReviewedMask}
+                    showOriginal={showOriginal}
+                    showProposal={showProposal}
+                    showAllStrips={showAllStrips}
+                    onSelectTask={setTaskIndex}
+                    editContour={editContour}
+                    onContourStart={checkpoint}
+                    onContourChange={(points) =>
+                      update(
+                        {
+                          ...document,
+                          contour: points,
+                          contour_reviewed: false,
+                        },
+                        false,
+                      )
+                    }
+                    showResults={showResults && resultsUnlocked}
+                    analysis={analysis}
+                  />
+                </ImageStage>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-white/70">
+                  {status}
+                </div>
+              )}
+            </div>
+            <div className="cb-profile" data-open={profileOpen}>
+              <div className="cb-profile-head">
+                <span className="cb-label">
+                  Scan profile {task ? `· ${task.sample_id}` : ""}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="cb-mini text-xs text-fg-muted">
+                    {request ? `${stripLength(request).toFixed(1)} px` : ""}
+                  </span>
+                  <Tooltip
+                    content={
+                      profileOpen
+                        ? "Collapse scan profile"
+                        : "Expand scan profile"
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="cb-profile-toggle"
+                      onClick={() => setProfileOpen(!profileOpen)}
+                      aria-label={
+                        profileOpen
+                          ? "Collapse scan profile"
+                          : "Expand scan profile"
+                      }
+                      aria-expanded={profileOpen}
+                    >
+                      <ChartLine size={16} />
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+              {profileOpen &&
+                (profile && request ? (
+                  <LineProfile
+                    label={`Intensity profile for ${task?.sample_id}`}
+                    series={[
+                      {
+                        name: "Grayscale intensity",
+                        points: profile.map((y, index) => ({
+                          x:
+                            (index * stripLength(request)) /
+                            (profile.length - 1),
+                          y,
+                        })),
+                      },
+                    ]}
+                    edges={marks}
+                    xDomain={[0, stripLength(request)]}
+                    yDomain={[0, 1]}
+                    variant="wide"
+                    xLabel="scan distance (px)"
+                    yLabel="intensity"
+                  />
+                ) : (
+                  <p className="px-3 pb-3 text-xs text-fg-muted">
+                    Select a strip to inspect its image signal.
+                  </p>
+                ))}
+            </div>
+          </section>
+          <aside className="cb-inspector" aria-label="Review controls">
+            <div className="cb-inspector-tabs">
+              <Tabs
+                items={[
+                  { id: "review", label: "Review" },
+                  { id: "settings", label: "Settings" },
+                ]}
+                active={inspectorTab}
+                onSelect={setInspectorTab}
+                label="Inspector views"
+                idPrefix="inspector"
+              />
+            </div>
+            {document && inspectorTab === "review" && (
+              <div
+                role="tabpanel"
+                id="inspector-panel-review"
+                aria-labelledby="inspector-tab-review"
+              >
+                <div className="cb-section cb-review-intro">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">Visible edge review</p>
+                    <span className="cb-mini text-xs text-fg-muted">
+                      {
+                        document.tasks.filter(
+                          (item) => item.disposition !== "pending",
+                        ).length
+                      }
+                      /{document.tasks.length}
+                    </span>
+                  </div>
+                  {document.proposal_flags.length > 0 && (
+                    <p className="mt-2 text-xs text-warn">
+                      Proposal flags · {document.proposal_flags.join(", ")}
+                    </p>
+                  )}
+                </div>
+                <div className="cb-section cb-layer-section">
+                  <div
+                    className="cb-layer-tools"
+                    role="group"
+                    aria-label="Layers and editing tools"
+                  >
+                    <LayerTool
+                      label="Source mask"
+                      active={showMask}
+                      onClick={() => setShowMask(!showMask)}
+                    >
+                      <ImageIcon size={18} />
+                    </LayerTool>
+                    <LayerTool
+                      label="Edited mask preview"
+                      active={showReviewedMask}
+                      onClick={() => setShowReviewedMask(!showReviewedMask)}
+                    >
+                      <Layers size={18} />
+                    </LayerTool>
+                    <LayerTool
+                      label="Original mask contour"
+                      active={showOriginal}
+                      onClick={() => setShowOriginal(!showOriginal)}
+                    >
+                      <Eye size={18} />
+                    </LayerTool>
+                    <LayerTool
+                      label="Refined contour proposal"
+                      active={showProposal}
+                      onClick={() => setShowProposal(!showProposal)}
+                    >
+                      <ScanLine size={18} />
+                    </LayerTool>
+                    <LayerTool
+                      label="Edit reviewed contour"
+                      active={editContour}
+                      onClick={() => setEditContour(!editContour)}
+                    >
+                      <Pencil size={18} />
+                    </LayerTool>
+                    <LayerTool
+                      label="Show all review probes"
+                      active={showAllStrips}
+                      onClick={() => setShowAllStrips(!showAllStrips)}
+                    >
+                      <ChartLine size={18} />
+                    </LayerTool>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <Checkbox
+                      label="Visible contour reviewed"
+                      checked={document.contour_reviewed}
+                      onCheckedChange={(value) =>
+                        update({ ...document, contour_reviewed: value })
+                      }
+                    />
+                    <div className="flex gap-1">
+                      <Tooltip content="Undo">
+                        <button
+                          type="button"
+                          className="cb-tool"
+                          aria-label="Undo"
+                          disabled={!undo.current.length}
+                          onClick={() => restore("undo")}
+                        >
+                          <RotateCcw size={16} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Redo">
+                        <button
+                          type="button"
+                          className="cb-tool"
+                          aria-label="Redo"
+                          disabled={!redo.current.length}
+                          onClick={() => restore("redo")}
+                        >
+                          <RotateCw size={16} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
-                )}
-              </div>
-              <div className="cb-section">
-                <p className="cb-label mb-3">Review identity</p>
-                <SchemaForm
-                  fields={reviewFields}
-                  values={reviewValues}
-                  onChange={(next) => {
-                    setReviewValues(next);
-                    if (next.reviewer !== reviewValues.reviewer)
-                      update({
-                        ...document,
-                        reviewer: String(next.reviewer ?? ""),
-                      });
-                  }}
-                />
-              </div>
-              <div className="cb-section space-y-3">
-                <p className="cb-label">Baseline comparison</p>
-                <Switch
-                  label="Show textbook predictions"
-                  description={
-                    resultsUnlocked
-                      ? "Available after approval; hidden during editing"
-                      : "Approve this revision to unlock comparison"
-                  }
-                  checked={showResults && resultsUnlocked}
-                  disabled={!resultsUnlocked}
-                  onCheckedChange={setShowResults}
-                />
-                {showResults && resultsUnlocked && task && analysis && (
-                  <div className="rounded border border-line bg-raised p-2 text-xs">
-                    <p className="mb-1 font-medium">
-                      Selected strip · {task.sample_id}
-                    </p>
-                    {METHODS.map((method) => {
-                      const prediction =
-                        analysis.predictions[task.sample_id]?.[method];
-                      const error =
-                        prediction?.status === "ok" &&
-                        prediction.edges_px[0] !== undefined &&
-                        task.crossing_px !== null
-                          ? prediction.edges_px[0] - task.crossing_px
-                          : null;
-                      return (
-                        <p key={method} className="flex justify-between gap-2">
-                          <span>{methodLabel[method]}</span>
-                          <span className="cb-mini">
-                            {error === null
-                              ? "failed"
-                              : `${error >= 0 ? "+" : ""}${error.toFixed(2)} px`}
-                          </span>
-                        </p>
-                      );
-                    })}
+                </div>
+                <div className="cb-section">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="cb-label">Review probes</p>
+                    <span className="text-xs text-fg-muted">
+                      {taskIndex + 1} / {document.tasks.length}
+                    </span>
                   </div>
-                )}
-                {report && report.approved_tasks > 0 && (
-                  <div className="space-y-2 text-xs">
-                    <p className="font-medium">
-                      Reviewed reference · {report.approved_tasks} crossings
-                    </p>
-                    {METHODS.map((method) => (
-                      <div key={method} className="border-b border-line pb-1">
-                        <div className="flex justify-between gap-2">
-                          <span>{methodLabel[method]}</span>
-                          <span className="cb-mini">
-                            {report.methods[method]?.mae_px?.toFixed(2) ?? "—"}{" "}
-                            px MAE
-                          </span>
-                        </div>
-                        <p className="text-fg-muted">
-                          Bias{" "}
-                          {report.methods[method]?.bias_px?.toFixed(2) ?? "—"}{" "}
-                          px · failure{" "}
-                          {(
-                            (report.methods[method]?.failure_rate ?? 0) * 100
-                          ).toFixed(1)}
-                          % ·{" "}
-                          {report.methods[method]?.median_runtime_ms?.toFixed(
-                            2,
-                          ) ?? "—"}{" "}
-                          ms
-                        </p>
+                  <p className="mb-2 text-xs text-fg-muted">
+                    Up to four mask-proxy strips plus scans along the proposed
+                    contour. Refinement itself uses image gradients.
+                  </p>
+                  <div className="cb-strip-grid">
+                    {document.tasks.map((item, index) => (
+                      <button
+                        key={item.sample_id}
+                        className="cb-strip-button"
+                        data-active={index === taskIndex}
+                        data-disposition={item.disposition}
+                        onClick={() => setTaskIndex(index)}
+                        aria-label={`Probe ${index + 1}, ${item.sample_id}: ${item.disposition}`}
+                      >
+                        {index + 1}
+                        {item.disposition === "approved"
+                          ? " ✓"
+                          : item.disposition === "excluded"
+                            ? " ×"
+                            : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {task && request && (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="cb-mini text-xs">
+                          {task.sample_id}
+                        </span>
+                        <Badge
+                          tone={
+                            task.disposition === "approved"
+                              ? "normal"
+                              : "neutral"
+                          }
+                        >
+                          {task.disposition}
+                        </Badge>
                       </div>
-                    ))}
-                    <p className="text-fg-muted">
-                      Reviewer-assigned uncertainty: mean{" "}
-                      {report.reviewer_uncertainty_px.mean?.toFixed(2) ?? "—"}{" "}
-                      px. This is not measured agreement.
-                    </p>
-                  </div>
-                )}
-                {report && (
-                  <div className="border-t border-line pt-2 text-xs text-fg-muted">
-                    <p className="font-medium">
-                      Exploratory mask proxy · {report.mask_proxy_context.tasks}{" "}
-                      tasks
-                    </p>
-                    {METHODS.map((method) => (
-                      <p key={method}>
-                        {methodLabel[method]}:{" "}
-                        {report.mask_proxy_context.methods[
-                          method
-                        ]?.mae_px.toFixed(2)}{" "}
-                        px MAE
+                      <label className="block text-xs font-medium">
+                        Reference crossing · scan distance (px)
+                        <NumberInput
+                          className="mt-1"
+                          value={task.crossing_px ?? ""}
+                          min={0}
+                          max={stripLength(request)}
+                          step="any"
+                          onChange={(e) =>
+                            setTask({
+                              crossing_px:
+                                e.target.value === ""
+                                  ? null
+                                  : Number(e.target.value),
+                              disposition: "pending",
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="block text-xs font-medium">
+                        Uncertainty (px)
+                        <NumberInput
+                          className="mt-1"
+                          value={task.uncertainty_px ?? ""}
+                          min={0.001}
+                          step="any"
+                          onChange={(e) =>
+                            setTask({
+                              uncertainty_px:
+                                e.target.value === ""
+                                  ? null
+                                  : Number(e.target.value),
+                              disposition: "pending",
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="block text-xs font-medium">
+                        Confidence
+                        <Select
+                          className="mt-1"
+                          value={task.confidence}
+                          onValueChange={(value) =>
+                            setTask({
+                              confidence: value as TaskReview["confidence"],
+                            })
+                          }
+                          options={[
+                            { value: "high", label: "High" },
+                            { value: "medium", label: "Medium" },
+                            { value: "low", label: "Low" },
+                          ]}
+                        />
+                      </label>
+                      <label className="block text-xs font-medium">
+                        Review note
+                        <Input
+                          className="mt-1"
+                          value={task.note}
+                          onChange={(e) => setTask({ note: e.target.value })}
+                        />
+                      </label>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={task.crossing_px === null}
+                          onClick={() =>
+                            setTask({
+                              disposition: "approved",
+                              uncertainty_px:
+                                task.uncertainty_px ??
+                                Number(reviewValues.default_uncertainty || 1),
+                            })
+                          }
+                        >
+                          Approve crossing
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setTask({
+                              disposition: "excluded",
+                              note: task.note || "ambiguous_visible_edge",
+                            })
+                          }
+                        >
+                          Exclude
+                        </Button>
+                      </div>
+                      <div className="flex justify-between">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<ChevronLeft />}
+                          disabled={taskIndex === 0}
+                          onClick={() => setTaskIndex((index) => index - 1)}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<ChevronRight />}
+                          disabled={taskIndex === document.tasks.length - 1}
+                          onClick={() => setTaskIndex((index) => index + 1)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="cb-section space-y-3">
+                  <p className="cb-label">Baseline comparison</p>
+                  <Switch
+                    label="Show textbook predictions"
+                    description={
+                      resultsUnlocked
+                        ? "Available after approval; hidden during editing"
+                        : "Approve this revision to unlock comparison"
+                    }
+                    checked={showResults && resultsUnlocked}
+                    disabled={!resultsUnlocked}
+                    onCheckedChange={setShowResults}
+                  />
+                  {showResults && resultsUnlocked && task && analysis && (
+                    <div className="rounded border border-line bg-raised p-2 text-xs">
+                      <p className="mb-1 font-medium">
+                        Selected strip · {task.sample_id}
                       </p>
-                    ))}
-                    <p>
-                      Different, unreviewed reference and sample count; for
-                      context only.
-                    </p>
-                  </div>
-                )}
+                      {METHODS.map((method) => {
+                        const prediction =
+                          analysis.predictions[task.sample_id]?.[method];
+                        const error =
+                          prediction?.status === "ok" &&
+                          prediction.edges_px[0] !== undefined &&
+                          task.crossing_px !== null
+                            ? prediction.edges_px[0] - task.crossing_px
+                            : null;
+                        return (
+                          <p
+                            key={method}
+                            className="flex justify-between gap-2"
+                          >
+                            <span>{methodLabel[method]}</span>
+                            <span className="cb-mini">
+                              {error === null
+                                ? "failed"
+                                : `${error >= 0 ? "+" : ""}${error.toFixed(2)} px`}
+                            </span>
+                          </p>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {report && report.approved_tasks > 0 && (
+                    <div className="space-y-2 text-xs">
+                      <p className="font-medium">
+                        Reviewed reference · {report.approved_tasks} crossings
+                      </p>
+                      {METHODS.map((method) => (
+                        <div key={method} className="border-b border-line pb-1">
+                          <div className="flex justify-between gap-2">
+                            <span>{methodLabel[method]}</span>
+                            <span className="cb-mini">
+                              {report.methods[method]?.mae_px?.toFixed(2) ??
+                                "—"}{" "}
+                              px MAE
+                            </span>
+                          </div>
+                          <p className="text-fg-muted">
+                            Bias{" "}
+                            {report.methods[method]?.bias_px?.toFixed(2) ?? "—"}{" "}
+                            px · failure{" "}
+                            {(
+                              (report.methods[method]?.failure_rate ?? 0) * 100
+                            ).toFixed(1)}
+                            % ·{" "}
+                            {report.methods[method]?.median_runtime_ms?.toFixed(
+                              2,
+                            ) ?? "—"}{" "}
+                            ms
+                          </p>
+                        </div>
+                      ))}
+                      <p className="text-fg-muted">
+                        Reviewer-assigned uncertainty: mean{" "}
+                        {report.reviewer_uncertainty_px.mean?.toFixed(2) ?? "—"}{" "}
+                        px. This is not measured agreement.
+                      </p>
+                    </div>
+                  )}
+                  {report && (
+                    <div className="border-t border-line pt-2 text-xs text-fg-muted">
+                      <p className="font-medium">
+                        Exploratory mask proxy ·{" "}
+                        {report.mask_proxy_context.tasks} tasks
+                      </p>
+                      {METHODS.map((method) => (
+                        <p key={method}>
+                          {methodLabel[method]}:{" "}
+                          {report.mask_proxy_context.methods[
+                            method
+                          ]?.mae_px.toFixed(2)}{" "}
+                          px MAE
+                        </p>
+                      ))}
+                      <p>
+                        Different, unreviewed reference and sample count; for
+                        context only.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="cb-section text-xs text-fg-muted">
-                <p className="cb-label mb-2">Provenance</p>
-                <p>Weld profiles · Zenodo v1 · CC BY 4.0</p>
-                <p className="mt-1 cb-mini break-all">
-                  Image SHA-256: {document.source_image_sha256}
-                </p>
-                <p className="mt-1">{document.proposal_method}</p>
+            )}
+            {document && inspectorTab === "settings" && (
+              <div
+                role="tabpanel"
+                id="inspector-panel-settings"
+                aria-labelledby="inspector-tab-settings"
+              >
+                <div className="cb-section">
+                  <p className="cb-label mb-3">Review settings</p>
+                  <SchemaForm
+                    fields={reviewFields}
+                    values={reviewValues}
+                    onChange={(next) => {
+                      setReviewValues(next);
+                      if (next.reviewer !== reviewValues.reviewer)
+                        update({
+                          ...document,
+                          reviewer: String(next.reviewer ?? ""),
+                        });
+                    }}
+                  />
+                </div>
+                <div className="cb-section text-xs text-fg-muted">
+                  <p className="cb-label mb-2">Provenance</p>
+                  <p>Weld profiles · Zenodo v1 · CC BY 4.0</p>
+                  <p className="mt-1 cb-mini break-all">
+                    Image SHA-256: {document.source_image_sha256}
+                  </p>
+                  <p className="mt-1">{document.proposal_method}</p>
+                </div>
               </div>
-            </>
-          )}
-        </aside>
-      </main>
-    </div>
+            )}
+          </aside>
+        </main>
+      </div>
+    </TooltipProvider>
   );
 }

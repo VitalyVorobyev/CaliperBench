@@ -76,10 +76,14 @@ class ReviewStore:
         self.pilot = json.loads((repository / "registry/weld-pilot-v1.json").read_text())
         self.assets = {row["image"].removesuffix(".jpg"): row for row in self.pilot["images"]}
         self.samples = {}
-        for line in (data_root / "annotations_weld_proxy.jsonl").read_text().splitlines():
-            sample = Sample.model_validate_json(line)
-            image_id = Path(sample.request.image).stem
-            self.samples.setdefault(image_id, []).append(sample)
+        for name in ("annotations_weld_proxy.jsonl", "annotations_weld_contour_candidates.jsonl"):
+            path = data_root / name
+            if not path.exists() and name.endswith("contour_candidates.jsonl"):
+                continue
+            for line in path.read_text().splitlines():
+                sample = Sample.model_validate_json(line)
+                image_id = Path(sample.request.image).stem
+                self.samples.setdefault(image_id, []).append(sample)
         with self.connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS drafts (image_id TEXT PRIMARY KEY, body TEXT NOT NULL, etag TEXT NOT NULL)"
@@ -110,6 +114,16 @@ class ReviewStore:
         ):
             raise ValueError("source checksum mismatch")
 
+    @staticmethod
+    def _task_from_sample(sample: Sample, contour) -> TaskReview:
+        request = sample.request
+        hits = strip_crossings(contour, request.strip.start_xy, request.strip.end_xy)
+        return TaskReview(
+            sample_id=request.sample_id,
+            crossing_px=hits[0] if len(hits) == 1 else None,
+            note="multiple_or_missing_proposal_crossings" if len(hits) != 1 else "",
+        )
+
     def _initial(self, image_id: str) -> ReviewDocument:
         self.source_verified(image_id)
         with (
@@ -119,19 +133,10 @@ class ReviewStore:
             image = np.asarray(source_image.convert("L"), dtype=float) / 255
             mask = np.asarray(source_mask.convert("L")) > 0
         result = propose(image, mask)
-        task_reviews = []
-        for sample in self.samples.get(image_id, []):
-            request = sample.request
-            hits = strip_crossings(
-                result.refined_contour, request.strip.start_xy, request.strip.end_xy
-            )
-            task_reviews.append(
-                TaskReview(
-                    sample_id=request.sample_id,
-                    crossing_px=hits[0] if len(hits) == 1 else None,
-                    note="multiple_or_missing_proposal_crossings" if len(hits) != 1 else "",
-                )
-            )
+        task_reviews = [
+            self._task_from_sample(sample, result.refined_contour)
+            for sample in self.samples.get(image_id, [])
+        ]
         row = self.row(image_id)
         return ReviewDocument(
             image_id=image_id,
@@ -154,6 +159,28 @@ class ReviewStore:
             ).fetchone()
         if row:
             document = ReviewDocument.model_validate_json(row[0])
+            existing = {task.sample_id for task in document.tasks}
+            current = {sample.request.sample_id for sample in self.samples.get(image_id, [])}
+            if existing - current:
+                raise ValueError(
+                    "candidate registry removed draft tasks; restore the original local candidate file"
+                )
+            additions = [
+                self._task_from_sample(sample, document.contour)
+                for sample in self.samples.get(image_id, [])
+                if sample.request.sample_id not in existing
+            ]
+            if additions:
+                document.tasks.extend(additions)
+                next_etag = digest(document)
+                with self.connect() as db:
+                    updated = db.execute(
+                        "UPDATE drafts SET body=?, etag=? WHERE image_id=? AND etag=?",
+                        (document.model_dump_json(), next_etag, image_id, row[1]),
+                    )
+                if updated.rowcount != 1:
+                    raise Conflict("draft changed in another session")
+                return document, next_etag
             # Refresh only an untouched proposal from an older algorithm version.
             # Human edits and approved revisions are never replaced.
             if (
@@ -212,7 +239,7 @@ class ReviewStore:
                 raise Conflict("draft changed in another session")
         return new_etag
 
-    def _validate_identity(self, image_id: str, document: ReviewDocument):
+    def _validate_identity(self, image_id: str, document: ReviewDocument, *, current_tasks=True):
         row = self.row(image_id)
         if (
             document.image_id != image_id
@@ -221,7 +248,9 @@ class ReviewStore:
         ):
             raise ValueError("document source identity changed")
         expected = {s.request.sample_id for s in self.samples.get(image_id, [])}
-        if {t.sample_id for t in document.tasks} != expected:
+        actual = {t.sample_id for t in document.tasks}
+        invalid_tasks = actual != expected if current_tasks else not actual.issubset(expected)
+        if invalid_tasks:
             raise ValueError("document task identity changed")
         with Image.open(self.image_path(image_id)) as image:
             width, height = image.size
@@ -291,7 +320,7 @@ class ReviewStore:
 
     def render_mask(self, image_id: str, document: ReviewDocument) -> bytes:
         """Deterministically rasterize a contour revision at source-image pixel centers."""
-        self._validate_identity(image_id, document)
+        self._validate_identity(image_id, document, current_tasks=False)
         with Image.open(self.image_path(image_id)) as image:
             width, height = image.size
         vertices_yx = np.asarray([(y, x) for x, y in document.contour], dtype=float)
@@ -316,11 +345,13 @@ class ReviewStore:
                 continue
             self.source_verified(image_id)
             revision_id, doc = latest
-            reviews = {task.sample_id: task for task in doc.tasks}
-            for proxy in self.samples.get(image_id, []):
-                task = reviews[proxy.request.sample_id]
+            available = {
+                sample.request.sample_id: sample for sample in self.samples.get(image_id, [])
+            }
+            for task in doc.tasks:
                 if task.disposition != "approved":
                     continue
+                proxy = available[task.sample_id]
                 exported.append(
                     Sample(
                         request=proxy.request,

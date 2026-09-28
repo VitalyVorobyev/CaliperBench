@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from caliperbench.data import sha256
+from caliperbench.probes import contour_probes
 from caliperbench.refine import propose, strip_crossings
 from caliperbench.review import Conflict, ReviewStore
 from caliperbench.schema import EdgeTruth, Provenance, Request, Sample, Strip
@@ -29,6 +30,21 @@ def test_crossing_rejects_ambiguous_geometry():
     assert strip_crossings(square, (5, 0), (5, 10)) == [2.0, 8.0]
     assert strip_crossings(square, (5, 0), (5, 4)) == [2.0]
     assert strip_crossings(square, (12, 0), (12, 10)) == []
+
+
+def test_dense_contour_probes_have_single_crossings_and_stable_positions():
+    angles = np.linspace(0, 2 * np.pi, 120, endpoint=False)
+    contour = [(50 + 25 * np.cos(t), 50 + 20 * np.sin(t)) for t in angles]
+    first = contour_probes(contour, 100, 100, count=24)
+    second = contour_probes(contour, 100, 100, count=24)
+    np.testing.assert_allclose(
+        [np.r_[center, start, end, crossing] for center, start, end, crossing in first],
+        [np.r_[center, start, end, crossing] for center, start, end, crossing in second],
+    )
+    assert len(first) >= 20
+    for _, start, end, crossing in first:
+        assert len(strip_crossings(contour, tuple(start), tuple(end))) == 1
+        assert abs(crossing - 12) < 3
 
 
 def test_review_revisions_conflicts_and_export(tmp_path):
@@ -115,3 +131,12 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     document.reviewer = "second-reviewer"
     store.save("demo", document, next_etag)
     assert store.latest("demo")[1].reviewer == "pilot-reviewer"
+    extra = sample.model_copy(deep=True)
+    extra.request.sample_id = "demo:contour:01"
+    (data / "annotations_weld_contour_candidates.jsonl").write_text(extra.model_dump_json() + "\n")
+    expanded = ReviewStore(repository, data)
+    migrated, _ = expanded.read("demo")
+    assert [task.sample_id for task in migrated.tasks] == ["demo:top", "demo:contour:01"]
+    assert migrated.tasks[0].disposition == "approved"
+    assert migrated.tasks[1].disposition == "pending"
+    assert len(expanded.export_samples()) == 1  # frozen revision retains its original task set

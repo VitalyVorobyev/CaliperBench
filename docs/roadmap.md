@@ -8,9 +8,9 @@ The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms
 
 ## Delivered — real-data pilot and review foundation
 
-The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance.
+The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance. A deterministic local generator adds 291 normal scan candidates along those proposals; the original mask-proxy samples remain separately identified. Active-contour refinement itself does not use caliper strips.
 
-The local app browses images, displays source/refined/reviewed contours and masks, edits contour vertices and strip crossings, shows line profiles, autosaves drafts, detects conflicting saves and freezes approvals. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
+The local app browses image thumbnails in a foldable panel, displays all review probes and source/refined/reviewed contours and masks, edits contour vertices and strip crossings, shows a collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes approvals. Reviewer defaults sit in a settings tab. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
 
 The current CI covers deterministic refinement, crossings, revision conflicts, approved-only export, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
 

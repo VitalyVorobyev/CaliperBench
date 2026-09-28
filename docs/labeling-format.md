@@ -2,7 +2,7 @@
 
 ## Current status
 
-A local pilot has downloaded 49 weld-profile photos and 49 masks and generated 185 **automatic mask-proxy** tasks under ignored `data/`. The committed 12-image pilot selection has editable classical contour proposals and a local review app. No crossing is yet approved. The `examples/annotation.jsonl` values and old mask-proxy file are not reviewed ground truth. `Sample`/`Request`/`Prediction` JSONL remains the evaluation contract; the separate local review document retains raw geometry and approval history.
+A local pilot has downloaded 49 weld-profile photos and 49 masks and generated 185 **automatic mask-proxy** tasks under ignored `data/`. The committed 12-image pilot selection has editable classical contour proposals and a local review app. A separate ignored file contains 291 deterministic normal-scan **review candidates** along those proposals. Active-contour refinement uses image gradients and no caliper strips; these scans are evaluation candidates, not its internal steps. No crossing is yet approved. The `examples/annotation.jsonl`, mask-proxy file, and contour-candidate file are not reviewed ground truth. `Sample`/`Request`/`Prediction` JSONL remains the evaluation contract; the separate local review document retains raw geometry and approval history.
 
 | Source | Supplied reference | What CaliperBench still needs |
 | --- | --- | --- |
