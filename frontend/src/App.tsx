@@ -52,7 +52,7 @@ import {
   type TaskReview,
   type Workspace,
 } from "./api";
-import { stripLength } from "./geometry";
+import { edgeClipSides, stripLength } from "./geometry";
 import { ContourLayer, SketchLayer } from "./ContourLayer";
 import { canApproveReview } from "./reviewPolicy";
 
@@ -111,11 +111,13 @@ function LayerTool({
   active,
   onClick,
   children,
+  disabled = false,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <Tooltip content={label}>
@@ -125,6 +127,7 @@ function LayerTool({
         aria-label={label}
         aria-pressed={active}
         data-active={active}
+        disabled={disabled}
         onClick={onClick}
       >
         {children}
@@ -221,7 +224,7 @@ function StageContent({
           dash="3 3"
         />
       )}
-      {showReviewedMask && (
+      {showReviewedMask && workspace.document.contour_closed && (
         <ContourDisplay
           points={workspace.document.contour}
           color="var(--signal)"
@@ -234,6 +237,7 @@ function StageContent({
         onEditStart={onContourStart}
         editable={editContour}
         brushRadius={brushRadius}
+        closed={workspace.document.contour_closed}
       />
       <MeasureOverlay
         nativeWidth={workspace.width}
@@ -510,11 +514,15 @@ export function App() {
         refined_contour: Point[];
         flags: string[];
         parameters: Record<string, unknown>;
+        closed: boolean;
+        clip_sides: ("top" | "right" | "bottom" | "left")[];
       }>(`/api/images/${encodeURIComponent(imageId)}/specimen-proposal`);
       if (currentDocument.current !== document) return;
       update({
         ...document,
         contour: proposal.refined_contour,
+        contour_closed: proposal.closed,
+        contour_clip_sides: proposal.clip_sides,
         contour_target: "visible_specimen",
         contour_edits: [
           ...document.contour_edits,
@@ -523,7 +531,11 @@ export function App() {
         contour_reviewed: false,
       });
       setProposalNote(
-        `Visible-specimen proposal loaded. ${proposal.flags.includes("specimen_touches_frame") ? "The specimen touches the frame; that clipped segment is not a measurable edge." : "Inspect all boundaries before freezing."}`,
+        proposal.closed
+          ? "Visible silhouette loaded. Review its edge before freezing."
+          : proposal.clip_sides.length
+            ? `Open edge loaded. The specimen exits the ${proposal.clip_sides.join(" and ")} frame boundary; no crop edge has been added.`
+            : "Open edge loaded. Review its endpoints before freezing.",
       );
       setSketchPoints(null);
       setEditContour(true);
@@ -543,9 +555,11 @@ export function App() {
         refined_contour: Point[];
         flags: string[];
         parameters: Record<string, unknown>;
+        closed: boolean;
       }>(`/api/images/${encodeURIComponent(imageId)}/snap`, "POST", {
         contour: document.contour,
         radius_px: snapRadius,
+        closed: document.contour_closed,
       });
       if (currentDocument.current !== document) return;
       update({
@@ -566,11 +580,24 @@ export function App() {
       setRefining(false);
     }
   };
-  const finishSketch = () => {
-    if (!document || !sketchPoints || sketchPoints.length < 3) return;
+  const finishSketch = (closed: boolean) => {
+    if (
+      !document ||
+      !workspace ||
+      !sketchPoints ||
+      sketchPoints.length < (closed ? 3 : 2)
+    )
+      return;
     update({
       ...document,
       contour: sketchPoints,
+      contour_closed: closed,
+      contour_clip_sides: edgeClipSides(
+        sketchPoints,
+        workspace.width,
+        workspace.height,
+        closed,
+      ),
       contour_target: "visible_specimen",
       contour_edits: [
         ...document.contour_edits,
@@ -585,7 +612,7 @@ export function App() {
     setEditContour(true);
     setProfileOpen(false);
     setProposalNote(
-      "Coarse outline loaded. Use Snap to visible edge, then inspect and correct it.",
+      `${closed ? "Coarse outline" : "Open edge"} loaded. Snap to the visible edge, then inspect and correct it.`,
     );
   };
   return (
@@ -739,6 +766,12 @@ export function App() {
                         {
                           ...document,
                           contour: points,
+                          contour_clip_sides: edgeClipSides(
+                            points,
+                            workspace.width,
+                            workspace.height,
+                            document.contour_closed,
+                          ),
                           contour_reviewed: false,
                         },
                         false,
@@ -847,9 +880,14 @@ export function App() {
                       <ImageIcon size={18} />
                     </LayerTool>
                     <LayerTool
-                      label="Edited mask preview"
-                      active={showReviewedMask}
+                      label={
+                        document.contour_closed
+                          ? "Edited mask preview"
+                          : "Mask preview requires a closed outline"
+                      }
+                      active={showReviewedMask && document.contour_closed}
                       onClick={() => setShowReviewedMask(!showReviewedMask)}
+                      disabled={!document.contour_closed}
                     >
                       <Layers size={18} />
                     </LayerTool>
@@ -889,8 +927,15 @@ export function App() {
                         <>
                           <Button
                             size="sm"
+                            disabled={sketchPoints.length < 2}
+                            onClick={() => finishSketch(false)}
+                          >
+                            Use open edge
+                          </Button>
+                          <Button
+                            size="sm"
                             disabled={sketchPoints.length < 3}
-                            onClick={finishSketch}
+                            onClick={() => finishSketch(true)}
                           >
                             Close outline ({sketchPoints.length})
                           </Button>
@@ -919,7 +964,7 @@ export function App() {
                     </div>
                     {sketchPoints && (
                       <p className="text-xs text-fg-muted">
-                        Click around the specimen, then close the outline.
+                        Click along a visible edge or around the specimen.
                       </p>
                     )}
                   </div>

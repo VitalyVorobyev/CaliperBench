@@ -15,7 +15,7 @@ export function SketchLayer({
     <svg
       viewBox={imageViewBox(stage.image)}
       className="absolute inset-0 h-full w-full cursor-crosshair overflow-visible"
-      aria-label="Click image to trace a coarse specimen outline"
+      aria-label="Click image to trace a coarse edge or specimen outline"
     >
       <rect
         x={0}
@@ -59,19 +59,23 @@ export function ContourLayer({
   onEditStart,
   editable,
   brushRadius,
+  closed,
 }: {
   points: Point[];
   onChange: (points: Point[]) => void;
   onEditStart: () => void;
   editable: boolean;
   brushRadius: number;
+  closed: boolean;
 }) {
   const stage = useStage();
   const drag = useRef<{ index: number; origin: Point; points: Point[] } | null>(
     null,
   );
   const [selected, setSelected] = useState(0);
-  const outline = points.map(([x, y]) => `${x},${y}`).join(" ");
+  const outline = (closed ? [...points, points[0]] : points)
+    .map(([x, y]) => `${x},${y}`)
+    .join(" ");
   const move = (origin: Point[], index: number, delta: Point) =>
     onChange(
       deformContour(
@@ -81,6 +85,7 @@ export function ContourLayer({
         brushRadius,
         stage.image.width,
         stage.image.height,
+        closed,
       ),
     );
   const pointerDown = (event: PointerEvent<SVGElement>, index: number) => {
@@ -116,12 +121,18 @@ export function ContourLayer({
       event.preventDefault();
       event.stopPropagation();
       setSelected(
-        (index + (event.key === "]" ? 1 : points.length - 1)) % points.length,
+        closed
+          ? (index + (event.key === "]" ? 1 : points.length - 1)) %
+              points.length
+          : Math.max(
+              0,
+              Math.min(points.length - 1, index + (event.key === "]" ? 1 : -1)),
+            ),
       );
     }
     if (
       (event.key === "Delete" || event.key === "Backspace") &&
-      points.length > 3
+      points.length > (closed ? 3 : 2)
     ) {
       event.preventDefault();
       onEditStart();
@@ -133,16 +144,16 @@ export function ContourLayer({
     <svg
       viewBox={imageViewBox(stage.image)}
       className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-      aria-label="Reviewed contour"
+      aria-label={closed ? "Reviewed contour" : "Open visible edge"}
     >
-      <polygon
+      <polyline
         points={outline}
         fill="none"
         stroke="var(--signal)"
         strokeWidth={stage.imageLength(1.5)}
       />
       {editable && (
-        <polygon
+        <polyline
           points={outline}
           fill="none"
           stroke="transparent"
@@ -151,7 +162,7 @@ export function ContourLayer({
           aria-label="Drag contour to reshape; double click to add a point"
           onPointerDown={(event) => {
             const p = stage.toImage({ x: event.clientX, y: event.clientY });
-            const segment = nearestSegment(points, [p.x, p.y]);
+            const segment = nearestSegment(points, [p.x, p.y], closed);
             const neighbor = (segment + 1) % points.length;
             const distance = (index: number) =>
               Math.hypot(points[index][0] - p.x, points[index][1] - p.y);
@@ -172,7 +183,7 @@ export function ContourLayer({
             event.stopPropagation();
             onEditStart();
             const p = stage.toImage({ x: event.clientX, y: event.clientY });
-            const i = nearestSegment(points, [p.x, p.y]);
+            const i = nearestSegment(points, [p.x, p.y], closed);
             onChange([
               ...points.slice(0, i + 1),
               [p.x, p.y],
@@ -182,6 +193,20 @@ export function ContourLayer({
           }}
         />
       )}
+      {!closed &&
+        [points[0], points[points.length - 1]].map(([x, y], index) => (
+          <circle
+            key={index}
+            cx={x}
+            cy={y}
+            r={stage.imageLength(3.5)}
+            fill="var(--warn)"
+            stroke="var(--surface)"
+            strokeWidth={stage.imageLength(1)}
+            aria-label="Open edge endpoint"
+            pointerEvents="none"
+          />
+        ))}
       {editable && points[selected] && (
         <circle
           cx={points[selected][0]}

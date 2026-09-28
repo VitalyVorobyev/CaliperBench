@@ -20,6 +20,8 @@ export type ReviewDocument = {
   source_contour: Point[];
   proposed_contour: Point[];
   contour: Point[];
+  contour_closed: boolean;
+  contour_clip_sides: ("top" | "right" | "bottom" | "left")[];
   contour_target: "weld_region" | "visible_specimen";
   contour_edits: {
     method: "specimen_silhouette" | "manual_trace" | "edge_snap";
@@ -95,10 +97,27 @@ export type Report = {
   };
 };
 
+async function responseError(response: Response): Promise<Error> {
+  const body = await response.text();
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "detail" in parsed &&
+      typeof parsed.detail === "string"
+    ) {
+      return new Error(parsed.detail);
+    }
+  } catch {
+    // Preserve non-JSON service errors below.
+  }
+  return new Error(`${response.status}: ${body}`);
+}
+
 export async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
-  if (!response.ok)
-    throw new Error(`${response.status}: ${await response.text()}`);
+  if (!response.ok) throw await responseError(response);
   return response.json() as Promise<T>;
 }
 
@@ -116,7 +135,6 @@ export async function sendJson<T>(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!response.ok)
-    throw new Error(`${response.status}: ${await response.text()}`);
+  if (!response.ok) throw await responseError(response);
   return response.json() as Promise<T>;
 }

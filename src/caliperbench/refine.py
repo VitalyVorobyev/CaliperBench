@@ -31,6 +31,8 @@ class Proposal:
     refined_contour: list[list[float]]
     flags: list[str]
     parameters: dict
+    closed: bool = True
+    clip_sides: tuple[str, ...] = ()
 
 
 def specimen_silhouette(image: np.ndarray) -> Proposal:
@@ -56,12 +58,31 @@ def specimen_silhouette(image: np.ndarray) -> Proposal:
     contours = find_contours(mask.astype(float), 0.5)
     if not contours:
         raise ValueError("foreground has no usable contour")
-    contour = max(contours, key=len)
+    ranked = sorted(contours, key=len, reverse=True)
+    if len(ranked) > 1 and len(ranked[1]) >= 0.25 * len(ranked[0]):
+        raise ValueError("multiple substantial visible edge chains; trace an edge manually")
+    contour = ranked[0]
+    closed = bool(np.allclose(contour[0], contour[-1]))
     stride = max(1, int(np.ceil(len(contour) / PARAMETERS["max_vertices"])))
-    source = [[round(float(x), 4), round(float(y), 4)] for y, x in contour[::stride]]
+    sampled = contour[::stride]
+    if not closed and not np.array_equal(sampled[-1], contour[-1]):
+        sampled = np.vstack((sampled, contour[-1]))
+    source = [[round(float(x), 4), round(float(y), 4)] for y, x in sampled]
     flags = ["automatic_specimen_silhouette_requires_review"]
-    if np.any(mask[0]) or np.any(mask[-1]) or np.any(mask[:, 0]) or np.any(mask[:, -1]):
+    clip_sides = tuple(
+        side
+        for side, contact in (
+            ("top", np.any(mask[0])),
+            ("right", np.any(mask[:, -1])),
+            ("bottom", np.any(mask[-1])),
+            ("left", np.any(mask[:, 0])),
+        )
+        if contact
+    )
+    if clip_sides:
         flags.append("specimen_touches_frame")
+    if not closed:
+        flags.append("visible_edge_open_at_frame")
     return Proposal(
         source,
         source,
@@ -72,6 +93,8 @@ def specimen_silhouette(image: np.ndarray) -> Proposal:
             "closing_radius_px": 3,
             "threshold": threshold,
         },
+        closed,
+        clip_sides,
     )
 
 
@@ -79,8 +102,10 @@ def snap_to_edge(
     image: np.ndarray,
     contour: list[list[float]],
     radius_px: float = 5.0,
+    *,
+    closed: bool = True,
 ) -> Proposal:
-    """Locally attach a coarse closed contour to nearby image gradients.
+    """Locally attach a coarse open edge or closed contour to nearby gradients.
 
     Search is only along each vertex normal; a displacement penalty prevents
     distant texture from winning. No global snake regularizer rounds corners.
@@ -89,8 +114,9 @@ def snap_to_edge(
     points = np.asarray(contour, dtype=float)
     if gray.ndim != 2 or not np.isfinite(gray).all():
         raise ValueError("image must be finite grayscale")
-    if points.ndim != 2 or points.shape[1] != 2 or not 3 <= len(points) <= 10000:
-        raise ValueError("closed contour needs 3–10000 xy points")
+    minimum = 3 if closed else 2
+    if points.ndim != 2 or points.shape[1] != 2 or not minimum <= len(points) <= 10000:
+        raise ValueError(f"contour needs {minimum}–10000 xy points")
     if not np.isfinite(points).all() or not 1 <= radius_px <= 20:
         raise ValueError("contour and radius must be finite; radius must be 1–20 px")
     height, width = gray.shape
@@ -106,14 +132,20 @@ def snap_to_edge(
     # segment so the snap works between anchors as well as at them.
     if len(points) < 300:
         pieces = []
-        for start, end in zip(points, np.roll(points, -1, axis=0), strict=True):
+        ends = np.roll(points, -1, axis=0) if closed else points[1:]
+        for start, end in zip(points if closed else points[:-1], ends, strict=True):
             count = max(1, int(np.ceil(np.linalg.norm(end - start) / 3)))
             pieces.extend(start + (end - start) * (j / count) for j in range(count))
+        if not closed:
+            pieces.append(points[-1])
         if len(pieces) <= 10000:
             points = np.asarray(pieces)
     smooth = gaussian(gray, 1.0, preserve_range=True)
     gy, gx = np.gradient(smooth)
     tangent = np.roll(points, -1, axis=0) - np.roll(points, 1, axis=0)
+    if not closed:
+        tangent[0] = points[1] - points[0]
+        tangent[-1] = points[-1] - points[-2]
     norm = np.linalg.norm(tangent, axis=1)
     valid = norm > 1e-6
     normal = np.zeros_like(tangent)
@@ -134,7 +166,9 @@ def snap_to_edge(
     choice = np.argmax(score, axis=1)
     displacement = offsets[choice]
     displacement[~valid | (local_peak < 0.015)] = 0
-    displacement = median_filter(displacement, size=3, mode="wrap")
+    displacement = median_filter(displacement, size=3, mode="wrap" if closed else "nearest")
+    if not closed:
+        displacement[[0, -1]] = 0
     result = points + normal * displacement[:, None]
     flags = []
     if np.count_nonzero(np.abs(displacement) >= radius_px - 0.25):
@@ -146,6 +180,7 @@ def snap_to_edge(
         [[round(float(x), 4), round(float(y), 4)] for x, y in result],
         flags,
         {"method": "normal-gradient-snap-v1", "gaussian_sigma": 1.0, "radius_px": radius_px},
+        closed,
     )
 
 

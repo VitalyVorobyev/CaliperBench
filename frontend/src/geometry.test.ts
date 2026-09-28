@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deformContour,
+  edgeClipSides,
   nearestSegment,
   pointAt,
   stripLength,
@@ -46,5 +47,41 @@ describe("image-coordinate geometry", () => {
     expect(moved[5][0]).toBeGreaterThan(10);
     expect(moved[3]).toEqual(points[3]);
     expect(deformContour(points, 0, [-50, 0], 25, 40, 40)[0][0]).toBe(0);
+  });
+  it("does not connect or deform opposite ends of an open edge", () => {
+    const points: [number, number][] = [
+      [0, 10],
+      [20, 10],
+      [40, 10],
+    ];
+    expect(nearestSegment(points, [1, 10], false)).toBe(0);
+    const moved = deformContour(points, 0, [0, 5], 25, 50, 30, false);
+    expect(moved[0][1]).toBe(15);
+    expect(moved[1][1]).toBeGreaterThan(10);
+    expect(moved[2]).toEqual(points[2]);
+    expect(
+      edgeClipSides(
+        [
+          [0, 10],
+          [20, 10],
+          [0, 20],
+        ],
+        50,
+        30,
+        false,
+      ),
+    ).toEqual(["left"]);
+    expect(
+      edgeClipSides(
+        [
+          [0, 10],
+          [20, 10],
+          [0, 20],
+        ],
+        50,
+        30,
+        true,
+      ),
+    ).toEqual([]);
   });
 });

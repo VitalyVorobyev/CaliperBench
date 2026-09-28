@@ -16,6 +16,7 @@ CaliperBench is a public benchmark for real-image edge localization and dimensio
 - Respect coordinate frames: CaliperBench uses pixel centers (`0,0` is the first pixel center); visual-anomaly-lab region documents use pixel-edge coordinates. An import adapter must explicitly transform coordinates and retain the original document and convention.
 - Generated proposals remain drafts until a human reviews them. Keep the proposal model/version/prompts and approval history; never quietly overwrite a completed reference.
 - The weld pilot is exploratory only: supplied region masks are not caliper ground truth. Do not export its frozen contours or proxy tasks as benchmark samples. Preserve local contour work, and require a new visible-segment protocol plus independent review before reconsidering eligibility. Keep physical measurements separate.
+- When an object leaves the image, retain an open visible edge and explicit frame-contact metadata. Never turn an image-border closure into an optical edge, caliper crossing, or width reference.
 
 ## Checks
 

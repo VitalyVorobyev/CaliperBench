@@ -170,6 +170,11 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     document, approved_etag = store.read("demo")
     document.reviewer = "second-reviewer"
     document.contour_target = "visible_specimen"
+    document.contour = [(0, 10), (39, 10)]
+    document.contour_closed = False
+    with pytest.raises(ValueError, match="frame-contact metadata"):
+        store.save("demo", document, approved_etag)
+    document.contour_clip_sides = ["right", "left"]
     document.contour_edits.append(ContourEdit(method="edge_snap", parameters={"radius_px": 5}))
     specimen_etag = store.save("demo", document, approved_etag)
     assert store.read("demo")[0].contour_target == "visible_specimen"
@@ -178,5 +183,9 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     assert store.latest("demo")[1].tasks[0].disposition == "excluded"
     assert store.latest("demo")[1].tasks[1].disposition == "approved"
     assert len(store._exploratory_samples()) == 1
-    assert store.approve("demo", specimen_etag)["derived_crossings"] == 0
+    open_revision = store.approve("demo", specimen_etag)
+    assert open_revision["derived_crossings"] == 0
+    assert open_revision["mask_sha256"] is None
+    with pytest.raises(ValueError, match="no complete region mask"):
+        store.render_mask("demo", store.latest("demo")[1])
     assert all(task.disposition == "excluded" for task in store.latest("demo")[1].tasks)

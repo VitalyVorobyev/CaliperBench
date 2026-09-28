@@ -53,6 +53,10 @@ class ReviewDocument(Strict):
     source_contour: list[tuple[float, float]]
     proposed_contour: list[tuple[float, float]]
     contour: list[tuple[float, float]]
+    contour_closed: bool = True
+    contour_clip_sides: list[Literal["top", "right", "bottom", "left"]] = Field(
+        default_factory=list
+    )
     contour_target: Literal["weld_region", "visible_specimen"] = "weld_region"
     contour_edits: list[ContourEdit] = Field(default_factory=list)
     contour_reviewed: bool = False
@@ -62,8 +66,11 @@ class ReviewDocument(Strict):
 
     @model_validator(mode="after")
     def valid_geometry(self):
-        if len(self.contour) < 3 or len(self.contour) > 10000:
-            raise ValueError("contour must have 3–10000 points")
+        minimum = 3 if self.contour_closed else 2
+        if len(self.contour) < minimum or len(self.contour) > 10000:
+            raise ValueError(f"contour must have {minimum}–10000 points")
+        if not self.contour_closed and self.contour_target != "visible_specimen":
+            raise ValueError("an open edge must target the visible specimen")
         if len({task.sample_id for task in self.tasks}) != len(self.tasks):
             raise ValueError("duplicate task IDs")
         if not np.isfinite(self.contour_uncertainty_px) or self.contour_uncertainty_px <= 0:
@@ -291,6 +298,20 @@ class ReviewStore:
             raise ValueError("document task identity changed")
         with Image.open(self.image_path(image_id)) as image:
             width, height = image.size
+        if not document.contour_closed:
+            ends = (document.contour[0], document.contour[-1])
+            actual_sides = [
+                side
+                for side, predicate in (
+                    ("top", lambda x, y: y <= 0.5),
+                    ("right", lambda x, y: x >= width - 1.5),
+                    ("bottom", lambda x, y: y >= height - 1.5),
+                    ("left", lambda x, y: x <= 0.5),
+                )
+                if any(predicate(x, y) for x, y in ends)
+            ]
+            if document.contour_clip_sides != actual_sides:
+                raise ValueError("open edge frame-contact metadata disagrees with endpoints")
         if any(
             not (-0.5 <= x <= width - 0.5 and -0.5 <= y <= height - 0.5)
             for x, y in document.contour
@@ -346,7 +367,11 @@ class ReviewStore:
                 )
             body = doc.model_dump_json()
             sha = hashlib.sha256(body.encode()).hexdigest()
-            mask_sha = hashlib.sha256(self.render_mask(image_id, doc)).hexdigest()
+            mask_sha = (
+                hashlib.sha256(self.render_mask(image_id, doc)).hexdigest()
+                if doc.contour_closed
+                else None
+            )
             approved_at = datetime.now(UTC).isoformat()
             cursor = db.execute(
                 "INSERT INTO revisions (image_id,body,sha256,approved_at) VALUES (?,?,?,?)",
@@ -376,6 +401,8 @@ class ReviewStore:
 
     def render_mask(self, image_id: str, document: ReviewDocument) -> bytes:
         """Deterministically rasterize a contour revision at source-image pixel centers."""
+        if not document.contour_closed:
+            raise ValueError("open visible edges have no complete region mask")
         self._validate_identity(image_id, document, current_tasks=False)
         with Image.open(self.image_path(image_id)) as image:
             width, height = image.size

@@ -123,11 +123,14 @@ def reviewed_mask(image_id: str, revision_id: int):
         return Response(store.render_mask(image_id, document), media_type="image/png")
     except KeyError:
         raise HTTPException(404, "unknown approved revision") from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
 
 
 class SnapRequest(BaseModel):
     contour: list[tuple[float, float]]
     radius_px: float = Field(default=5, ge=1, le=20)
+    closed: bool = True
 
 
 def _gray_source(image_id: str) -> np.ndarray:
@@ -149,7 +152,9 @@ def specimen_proposal(image_id: str):
 @app.post("/api/images/{image_id}/snap")
 def snap(image_id: str, request: SnapRequest):
     try:
-        return snap_to_edge(_gray_source(image_id), request.contour, request.radius_px)
+        return snap_to_edge(
+            _gray_source(image_id), request.contour, request.radius_px, closed=request.closed
+        )
     except KeyError:
         raise HTTPException(404, "unknown pilot image") from None
     except ValueError as exc:
