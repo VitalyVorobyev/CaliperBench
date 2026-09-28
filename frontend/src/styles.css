@@ -122,9 +122,6 @@ button {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-.cb-review-intro {
-  padding-block: 11px;
-}
 .cb-layer-section {
   padding-block: 10px;
 }

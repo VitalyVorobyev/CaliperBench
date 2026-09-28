@@ -701,9 +701,6 @@ export function App() {
                   >
                     {images.find((row) => row.id === selected)?.name ?? "—"}
                   </p>
-                  <p className="mt-2 text-xs text-fg-muted">
-                    Exploratory annotation · no benchmark export
-                  </p>
                 </div>
               </>
             )}
@@ -836,28 +833,6 @@ export function App() {
                 id="inspector-panel-review"
                 aria-labelledby="inspector-tab-review"
               >
-                <div className="cb-section cb-review-intro">
-                  <p className="text-sm font-semibold">
-                    {document.contour_target === "visible_specimen"
-                      ? "Visible specimen outline"
-                      : "Weld-region proposal"}
-                  </p>
-                  <p className="mt-2 text-xs text-fg-muted">
-                    The source mask marks weld material, not the entire metal
-                    specimen. Start with an automatic silhouette or trace a
-                    coarse outline; then snap it to nearby visible edges.
-                  </p>
-                  <p className="mt-2 text-xs text-fg-muted">
-                    This collection has no valid caliper ground truth. Frozen
-                    contours stay local for exploratory review.
-                  </p>
-                  {document.proposal_flags.length > 0 && (
-                    <p className="mt-2 text-xs text-warn">
-                      The automatic contour needs careful review, especially
-                      near corners.
-                    </p>
-                  )}
-                </div>
                 <div className="cb-section cb-layer-section">
                   <div
                     className="cb-layer-tools"
@@ -942,11 +917,11 @@ export function App() {
                         </Button>
                       )}
                     </div>
-                    <p className="text-xs text-fg-muted">
-                      {sketchPoints
-                        ? "Click around the specimen; use Close outline after at least three points."
-                        : "Automatic and traced outlines are editable proposals, not ground truth."}
-                    </p>
+                    {sketchPoints && (
+                      <p className="text-xs text-fg-muted">
+                        Click around the specimen, then close the outline.
+                      </p>
+                    )}
                   </div>
                   <div className="mt-4 border-t border-line pt-4">
                     <label
@@ -1041,12 +1016,12 @@ export function App() {
                     </div>
                   </div>
                 </div>
-                {document.contour_target === "weld_region" ? (
+                {document.contour_target === "weld_region" && (
                   <div className="cb-section">
                     <p className="cb-label mb-2">Signal inspection</p>
                     <Switch
                       label="Show one normal scan"
-                      description="Optional diagnostic. Freezing reorients each usable scan to the edited contour."
+                      description="Inspect image intensity across the contour."
                       checked={profileOpen}
                       onCheckedChange={setProfileOpen}
                     />
@@ -1092,26 +1067,12 @@ export function App() {
                           />
                         </div>
                         <p className="mt-2 text-xs text-fg-muted">
-                          {taskIndex + 1} of {contourTasks.length} candidate
-                          positions · diagnostic only
+                          {taskIndex + 1} of {contourTasks.length} positions
                         </p>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="cb-section text-xs text-fg-muted">
-                    No scan is generated from this silhouette until visible
-                    segments are selected.
-                  </div>
                 )}
-                <div className="cb-section text-xs text-fg-muted">
-                  <p className="cb-label mb-2">Dataset status</p>
-                  <p>
-                    The source mask labels a weld region. It supplies neither
-                    precise optical edges nor physical dimensions. Benchmark
-                    scoring is disabled for this collection.
-                  </p>
-                </div>
               </div>
             )}
             {document && inspectorTab === "settings" && (
