@@ -6,10 +6,10 @@ import pytest
 from PIL import Image
 
 from caliperbench.data import sha256
-from caliperbench.probes import contour_probes
+from caliperbench.probes import contour_probes, normal_scan_at_crossing
 from caliperbench.refine import propose, strip_crossings
-from caliperbench.review import Conflict, ReviewStore
-from caliperbench.schema import EdgeTruth, Provenance, Request, Sample, Strip
+from caliperbench.review import Conflict, ReviewStore, digest
+from caliperbench.schema import Candidate, EdgeTruth, Provenance, Request, Sample, Strip
 
 
 def test_classical_refinement_is_deterministic_and_flagged():
@@ -45,6 +45,18 @@ def test_dense_contour_probes_have_single_crossings_and_stable_positions():
     for _, start, end, crossing in first:
         assert len(strip_crossings(contour, tuple(start), tuple(end))) == 1
         assert abs(crossing - 12) < 3
+
+
+def test_frozen_scan_turns_normal_to_reviewed_inclined_edge():
+    contour = [(10 + i, 10 + i) for i in range(31)] + [(40, 60), (10, 60)]
+    old = Strip(start_xy=(20, 15), end_xy=(20, 25), samples=11)
+    crossing = strip_crossings(contour, old.start_xy, old.end_xy)[0]
+    aligned = normal_scan_at_crossing(contour, old, crossing, 80, 80)
+    assert aligned is not None
+    strip, new_crossing = aligned
+    vector = np.subtract(strip.end_xy, strip.start_xy)
+    assert abs(vector[0] + vector[1]) < 1e-6
+    assert abs(new_crossing - 5) < 1e-3
 
 
 def test_review_revisions_conflicts_and_export(tmp_path):
@@ -100,8 +112,31 @@ def test_review_revisions_conflicts_and_export(tmp_path):
         ),
     )
     (data / "annotations_weld_proxy.jsonl").write_text(sample.model_dump_json() + "\n")
+    extra_request = request.model_copy(deep=True)
+    extra_request.sample_id = "demo:contour:01"
+    extra = Candidate(
+        request=extra_request,
+        split="development",
+        provenance=sample.provenance,
+        proposal_crossing_px=5.5,
+    )
+    with pytest.raises(ValueError):
+        Sample.model_validate_json(extra.model_dump_json())
+    (data / "annotations_weld_contour_candidates_v2.jsonl").write_text(
+        extra.model_dump_json() + "\n"
+    )
     store = ReviewStore(repository, data)
     document, etag = store.read("demo")
+    document.schema_version = 1
+    document.contour_reviewed = True
+    with store.connect() as db:
+        db.execute(
+            "UPDATE drafts SET body=?, etag=? WHERE image_id=?",
+            (document.model_dump_json(), digest(document), "demo"),
+        )
+    document, etag = store.read("demo")
+    assert document.schema_version == 2
+    assert not document.contour_reviewed
     assert store.export_samples() == []
     assert document.tasks[0].disposition == "pending"
     document.proposal_flags.append("tampered")
@@ -112,9 +147,7 @@ def test_review_revisions_conflicts_and_export(tmp_path):
         store.approve("demo", etag)
     document.reviewer = "pilot-reviewer"
     document.contour_reviewed = True
-    document.tasks[0].disposition = "approved"
-    document.tasks[0].uncertainty_px = 1.0
-    document.tasks[0].crossing_px = strip_crossings(document.contour, (20, 5), (20, 15))[0]
+    document.contour_uncertainty_px = 0.75
     next_etag = store.save("demo", document, etag)
     with pytest.raises(Conflict):
         store.save("demo", document, etag)
@@ -127,16 +160,15 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     assert raster.shape == (36, 40)
     assert raster[20, 20] == 255
     assert raster[0, 0] == 0
-    assert store.export_samples()[0].edge_truth.method == "single-reviewer-visible-edge"
+    exported = store.export_samples()
+    assert len(exported) == 1
+    assert exported[0].request.sample_id == "demo:contour:01"
+    assert exported[0].edge_truth.method == "single-reviewer-contour-derived-edge"
+    assert exported[0].edge_truth.uncertainty_px == 0.75
+    document, approved_etag = store.read("demo")
     document.reviewer = "second-reviewer"
-    store.save("demo", document, next_etag)
+    store.save("demo", document, approved_etag)
     assert store.latest("demo")[1].reviewer == "pilot-reviewer"
-    extra = sample.model_copy(deep=True)
-    extra.request.sample_id = "demo:contour:01"
-    (data / "annotations_weld_contour_candidates.jsonl").write_text(extra.model_dump_json() + "\n")
-    expanded = ReviewStore(repository, data)
-    migrated, _ = expanded.read("demo")
-    assert [task.sample_id for task in migrated.tasks] == ["demo:top", "demo:contour:01"]
-    assert migrated.tasks[0].disposition == "approved"
-    assert migrated.tasks[1].disposition == "pending"
-    assert len(expanded.export_samples()) == 1  # frozen revision retains its original task set
+    assert store.latest("demo")[1].tasks[0].disposition == "excluded"
+    assert store.latest("demo")[1].tasks[1].disposition == "approved"
+    assert len(store.export_samples()) == 1

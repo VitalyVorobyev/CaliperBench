@@ -35,3 +35,35 @@ export function nearestSegment(points: Point[], point: Point): number {
   }
   return winner;
 }
+
+/** Move a local arc of a closed contour with a smooth, distance-based brush. */
+export function deformContour(
+  points: Point[],
+  anchor: number,
+  delta: Point,
+  radius: number,
+  width: number,
+  height: number,
+): Point[] {
+  const n = points.length;
+  if (!n || radius <= 0) return points;
+  const arc = [0];
+  for (let i = 0; i < n; i++) {
+    const a = points[i],
+      b = points[(i + 1) % n];
+    arc.push(arc[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const perimeter = arc[n];
+  return points.map(([x, y], i) => {
+    const direct = Math.abs(arc[i] - arc[anchor]);
+    const distance = Math.min(direct, perimeter - direct);
+    const weight =
+      distance >= radius
+        ? 0
+        : (1 + Math.cos((Math.PI * distance) / radius)) / 2;
+    return [
+      Math.max(0, Math.min(width - 1, x + delta[0] * weight)),
+      Math.max(0, Math.min(height - 1, y + delta[1] * weight)),
+    ];
+  });
+}

@@ -130,8 +130,17 @@ button {
 }
 .cb-layer-tools {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
+}
+.cb-range {
+  width: 100%;
+  accent-color: var(--signal);
+  cursor: pointer;
+}
+.cb-index-input {
+  width: 68px;
+  flex: none;
 }
 .cb-tool {
   display: inline-grid;

@@ -4,6 +4,7 @@ import type { ReviewDocument } from "./api";
 
 const base = {
   contour_reviewed: true,
+  contour_uncertainty_px: 1,
   reviewer: "reviewer",
   tasks: [
     {
@@ -18,29 +19,20 @@ const base = {
 } as ReviewDocument;
 
 describe("review approval preflight", () => {
-  it("requires a named contour review and a decision for every strip", () => {
+  it("requires a named contour review with positive uncertainty", () => {
     expect(canApproveReview(base)).toBe(true);
     expect(canApproveReview({ ...base, reviewer: " " })).toBe(false);
     expect(canApproveReview({ ...base, contour_reviewed: false })).toBe(false);
-    expect(
-      canApproveReview({
-        ...base,
-        tasks: [{ ...base.tasks[0], disposition: "pending" }],
-      }),
-    ).toBe(false);
+    expect(canApproveReview({ ...base, contour_uncertainty_px: 0 })).toBe(
+      false,
+    );
   });
-  it("rejects missing uncertainty but permits explicit exclusions", () => {
-    expect(
-      canApproveReview({
-        ...base,
-        tasks: [{ ...base.tasks[0], uncertainty_px: null }],
-      }),
-    ).toBe(false);
+  it("does not require individual scan decisions", () => {
     expect(
       canApproveReview({
         ...base,
         tasks: [
-          { ...base.tasks[0], disposition: "excluded", crossing_px: null },
+          { ...base.tasks[0], disposition: "pending", crossing_px: null },
         ],
       }),
     ).toBe(true);

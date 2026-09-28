@@ -6,9 +6,10 @@ export type TaskReview = {
   uncertainty_px: number | null;
   confidence: "high" | "medium" | "low";
   note: string;
+  frozen_request?: Request | null;
 };
 export type ReviewDocument = {
-  schema_version: 1;
+  schema_version: 1 | 2;
   image_id: string;
   source_image_sha256: string;
   source_mask_sha256: string;
@@ -20,6 +21,7 @@ export type ReviewDocument = {
   proposed_contour: Point[];
   contour: Point[];
   contour_reviewed: boolean;
+  contour_uncertainty_px: number;
   tasks: TaskReview[];
   reviewer: string;
 };

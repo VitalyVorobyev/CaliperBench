@@ -10,17 +10,17 @@ The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms
 
 The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance. A deterministic local generator adds 291 normal scan candidates along those proposals; the original mask-proxy samples remain separately identified. Active-contour refinement itself does not use caliper strips.
 
-The local app browses image thumbnails in a foldable panel, displays all review probes and source/refined/reviewed contours and masks, edits contour vertices and strip crossings, shows a collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes approvals. Reviewer defaults sit in a settings tab. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
+The local app browses image thumbnails in a foldable panel, displays source/refined/reviewed contours and masks, reshapes neighboring contour vertices with an adjustable brush, offers a single optional normal scan and collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes approvals. Reviewer defaults sit in a settings tab. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
 
 The current CI covers deterministic refinement, crossings, revision conflicts, approved-only export, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
 
 ## Next — human review and visual acceptance
 
-Have one reviewer inspect all 12 images, edit the visible contour, approve or exclude every strip crossing, assign uncertainty and confidence, and freeze revisions. An external reviewer must still verify the app’s visual alignment and interaction quality at normal and high zoom, on a narrow window and with keyboard navigation. Record failures and any needed refinements before calling the pilot ready.
+Have one reviewer inspect all 12 images, edit the visible contour, assign a contour uncertainty, and freeze suitable revisions. Normal scan requests and geometric crossings are generated from the frozen contour and stored in the immutable revision. Exclude images or boundary portions that do not show a defensible visible transition before any public release. An external reviewer must still verify the app’s visual alignment and interaction quality at normal and high zoom, on a narrow window and with keyboard navigation. Record failures and any needed refinements before calling the pilot ready.
 
 Compare approved references against all three existing baselines. Report edge MAE, bias, detection failures, runtime, reviewer-assigned uncertainty and image-group counts. Keep the 185 mask-proxy tasks as exploratory diagnostics, never substitute them for reviewed references. Do not report width/center or physical error until those truth tracks have real observations.
 
-**Gate:** user confirms overlay alignment, contour editing, review decisions and reproducible report on the 12 images. A one-reviewer pilot does not establish inter-reviewer agreement.
+**Gate:** user confirms overlay alignment, contour editing, suitability of each visible boundary, and reproducible report on accepted images. The weld masks also include ambiguous internal region boundaries; this source may remain an exploratory subset rather than a core caliper benchmark. A one-reviewer pilot does not establish inter-reviewer agreement.
 
 ## Later — broaden truth tracks and supported app
 

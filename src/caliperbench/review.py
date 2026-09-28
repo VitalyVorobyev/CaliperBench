@@ -17,8 +17,9 @@ from skimage.draw import polygon2mask
 
 from .baseline import METHODS, _profile, predict
 from .data import sha256
+from .probes import normal_scan_at_crossing
 from .refine import PARAMETERS, propose, strip_crossings
-from .schema import EdgeTruth, Provenance, Sample
+from .schema import Candidate, EdgeTruth, Provenance, Request, Sample
 
 
 class Strict(BaseModel):
@@ -32,10 +33,11 @@ class TaskReview(Strict):
     uncertainty_px: float | None = None
     confidence: Literal["high", "medium", "low"] = "medium"
     note: str = ""
+    frozen_request: Request | None = None
 
 
 class ReviewDocument(Strict):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     image_id: str
     source_image_sha256: str
     source_mask_sha256: str
@@ -47,6 +49,7 @@ class ReviewDocument(Strict):
     proposed_contour: list[tuple[float, float]]
     contour: list[tuple[float, float]]
     contour_reviewed: bool = False
+    contour_uncertainty_px: float = 1.0
     tasks: list[TaskReview]
     reviewer: str = ""
 
@@ -56,6 +59,8 @@ class ReviewDocument(Strict):
             raise ValueError("contour must have 3–10000 points")
         if len({task.sample_id for task in self.tasks}) != len(self.tasks):
             raise ValueError("duplicate task IDs")
+        if not np.isfinite(self.contour_uncertainty_px) or self.contour_uncertainty_px <= 0:
+            raise ValueError("contour uncertainty must be positive")
         return self
 
 
@@ -76,12 +81,22 @@ class ReviewStore:
         self.pilot = json.loads((repository / "registry/weld-pilot-v1.json").read_text())
         self.assets = {row["image"].removesuffix(".jpg"): row for row in self.pilot["images"]}
         self.samples = {}
-        for name in ("annotations_weld_proxy.jsonl", "annotations_weld_contour_candidates.jsonl"):
+        candidate_name = (
+            "annotations_weld_contour_candidates_v2.jsonl"
+            if (data_root / "annotations_weld_contour_candidates_v2.jsonl").exists()
+            else "annotations_weld_contour_candidates.jsonl"
+        )
+        for name in ("annotations_weld_proxy.jsonl", candidate_name):
             path = data_root / name
             if not path.exists() and name.endswith("contour_candidates.jsonl"):
                 continue
             for line in path.read_text().splitlines():
-                sample = Sample.model_validate_json(line)
+                sample = (
+                    Sample.model_validate_json(line)
+                    if name == "annotations_weld_proxy.jsonl"
+                    or name.endswith("contour_candidates.jsonl")
+                    else Candidate.model_validate_json(line)
+                )
                 image_id = Path(sample.request.image).stem
                 self.samples.setdefault(image_id, []).append(sample)
         with self.connect() as db:
@@ -115,7 +130,7 @@ class ReviewStore:
             raise ValueError("source checksum mismatch")
 
     @staticmethod
-    def _task_from_sample(sample: Sample, contour) -> TaskReview:
+    def _task_from_sample(sample: Sample | Candidate, contour) -> TaskReview:
         request = sample.request
         hits = strip_crossings(contour, request.strip.start_xy, request.strip.end_xy)
         return TaskReview(
@@ -159,6 +174,20 @@ class ReviewStore:
             ).fetchone()
         if row:
             document = ReviewDocument.model_validate_json(row[0])
+            if document.schema_version == 1:
+                # The v1 checkbox referred to contour plus per-crossing review.
+                # Require a fresh explicit contour-only decision without losing edits.
+                document.schema_version = 2
+                document.contour_reviewed = False
+                next_etag = digest(document)
+                with self.connect() as db:
+                    updated = db.execute(
+                        "UPDATE drafts SET body=?, etag=? WHERE image_id=? AND etag=?",
+                        (document.model_dump_json(), next_etag, image_id, row[1]),
+                    )
+                if updated.rowcount != 1:
+                    raise Conflict("draft changed in another session")
+                row = (document.model_dump_json(), next_etag)
             existing = {task.sample_id for task in document.tasks}
             current = {sample.request.sample_id for sample in self.samples.get(image_id, [])}
             if existing - current:
@@ -220,6 +249,7 @@ class ReviewStore:
                 raise Conflict("draft changed in another session")
             previous = ReviewDocument.model_validate_json(current[0])
             immutable = (
+                "schema_version",
                 "source_image_sha256",
                 "source_mask_sha256",
                 "coordinate_system",
@@ -273,26 +303,33 @@ class ReviewStore:
             if not doc.contour_reviewed or not doc.reviewer.strip():
                 raise ValueError("reviewer and contour approval are required")
             by_id = {sample.request.sample_id: sample for sample in self.samples.get(image_id, [])}
+            with Image.open(self.image_path(image_id)) as source_image:
+                width, height = source_image.size
             for task in doc.tasks:
-                if task.disposition == "pending":
-                    raise ValueError(f"task {task.sample_id} is still pending")
-                if task.disposition == "approved":
-                    if (
-                        task.crossing_px is None
-                        or task.uncertainty_px is None
-                        or task.uncertainty_px <= 0
-                    ):
-                        raise ValueError(
-                            f"task {task.sample_id} needs crossing and positive uncertainty"
-                        )
-                    strip = by_id[task.sample_id].request.strip
-                    if not 0 <= task.crossing_px <= strip.length:
-                        raise ValueError("approved crossing is outside strip")
-                    hits = strip_crossings(doc.contour, strip.start_xy, strip.end_xy)
-                    if len(hits) != 1 or abs(hits[0] - task.crossing_px) > max(
-                        2, task.uncertainty_px
-                    ):
-                        raise ValueError(f"task {task.sample_id} disagrees with reviewed contour")
+                if ":contour:" not in task.sample_id:
+                    task.disposition = "excluded"
+                    task.note = "legacy_mask_proxy_only"
+                    task.frozen_request = None
+                    continue
+                strip = by_id[task.sample_id].request.strip
+                hits = strip_crossings(doc.contour, strip.start_xy, strip.end_xy)
+                aligned = (
+                    normal_scan_at_crossing(doc.contour, strip, hits[0], width, height)
+                    if len(hits) == 1
+                    else None
+                )
+                task.crossing_px = aligned[1] if aligned else None
+                task.frozen_request = (
+                    by_id[task.sample_id].request.model_copy(update={"strip": aligned[0]})
+                    if aligned
+                    else None
+                )
+                task.disposition = "approved" if aligned else "excluded"
+                task.uncertainty_px = doc.contour_uncertainty_px if aligned else None
+                task.confidence = "medium" if aligned else "low"
+                task.note = (
+                    "normal_to_reviewed_contour" if aligned else "ambiguous_or_out_of_bounds"
+                )
             body = doc.model_dump_json()
             sha = hashlib.sha256(body.encode()).hexdigest()
             mask_sha = hashlib.sha256(self.render_mask(image_id, doc)).hexdigest()
@@ -301,11 +338,16 @@ class ReviewStore:
                 "INSERT INTO revisions (image_id,body,sha256,approved_at) VALUES (?,?,?,?)",
                 (image_id, body, sha, approved_at),
             )
+            db.execute(
+                "UPDATE drafts SET body=?, etag=? WHERE image_id=? AND etag=?",
+                (body, digest(doc), image_id, expected),
+            )
         return {
             "revision_id": cursor.lastrowid,
             "sha256": sha,
             "mask_sha256": mask_sha,
             "approved_at": approved_at,
+            "derived_crossings": sum(task.disposition == "approved" for task in doc.tasks),
         }
 
     def revision(self, image_id: str, revision_id: int) -> ReviewDocument:
@@ -354,7 +396,7 @@ class ReviewStore:
                 proxy = available[task.sample_id]
                 exported.append(
                     Sample(
-                        request=proxy.request,
+                        request=task.frozen_request or proxy.request,
                         split="development",
                         provenance=Provenance(
                             dataset_id=proxy.provenance.dataset_id,
@@ -364,13 +406,13 @@ class ReviewStore:
                             source_image_id=proxy.provenance.source_image_id,
                             annotator=doc.reviewer,
                             annotation_version=f"review-revision-{revision_id}",
-                            derivation=f"human-reviewed contour and crossing; revision={revision_id}; sha256={digest(doc)}",
+                            derivation=f"single-reviewer contour; frozen normal scan and crossing derived geometrically; revision={revision_id}; sha256={digest(doc)}",
                             group_id=proxy.provenance.group_id,
                         ),
                         edge_truth=EdgeTruth(
                             positions_px=[task.crossing_px],
                             uncertainty_px=task.uncertainty_px,
-                            method="single-reviewer-visible-edge",
+                            method="single-reviewer-contour-derived-edge",
                             confidence=task.confidence,
                         ),
                     )
@@ -383,8 +425,14 @@ class ReviewStore:
             image = np.asarray(source_image.convert("L"), dtype=float) / 255
         results = {}
         profiles = {}
+        latest = self.latest(image_id)
+        frozen = (
+            {task.sample_id: task.frozen_request for task in latest[1].tasks if task.frozen_request}
+            if latest
+            else {}
+        )
         for sample in self.samples.get(image_id, []):
-            request = sample.request
+            request = frozen.get(sample.request.sample_id) or sample.request
             profiles[request.sample_id] = _profile(image, request.strip).tolist()
             results[request.sample_id] = {
                 method: predict(image, request, method).model_dump() for method in METHODS

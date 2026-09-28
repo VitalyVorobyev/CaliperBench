@@ -9,8 +9,6 @@ import {
 import {
   Check,
   ChartLine,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   Image as ImageIcon,
   Layers,
@@ -23,12 +21,9 @@ import {
   ScanLine,
 } from "lucide-react";
 import {
-  Badge,
   Button,
   Checkbox,
-  Input,
   NumberInput,
-  Select,
   Switch,
   Tabs,
   Tooltip,
@@ -69,11 +64,11 @@ const reviewFields = describeFields({
       description: "Name recorded in every approved revision",
       "x-primary": true,
     },
-    default_uncertainty: {
+    contour_uncertainty_px: {
       type: "number",
-      title: "Default uncertainty (px)",
+      title: "Contour uncertainty (px)",
       description:
-        "Applied when approving a crossing; edit each task if needed",
+        "Reviewer-assigned allowance for contour-derived crossings; not measured agreement",
       default: 1,
       exclusiveMinimum: 0,
       "x-primary": true,
@@ -122,51 +117,6 @@ function ContourDisplay({
   );
 }
 
-function StripOverview({
-  workspace,
-  selectedIndex,
-  onSelect,
-}: {
-  workspace: Workspace;
-  selectedIndex: number;
-  onSelect: (index: number) => void;
-}) {
-  const stage = useStage();
-  return (
-    <svg
-      viewBox={imageViewBox(stage.image)}
-      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-      aria-hidden="true"
-    >
-      {workspace.document.tasks.map((item, index) => {
-        const strip = workspace.requests[item.sample_id]?.strip;
-        if (!strip) return null;
-        return (
-          <line
-            key={item.sample_id}
-            x1={strip.start_xy[0]}
-            y1={strip.start_xy[1]}
-            x2={strip.end_xy[0]}
-            y2={strip.end_xy[1]}
-            stroke="var(--probe)"
-            strokeOpacity={index === selectedIndex ? 1 : 0.85}
-            strokeWidth={stage.imageLength(index === selectedIndex ? 2.5 : 1.6)}
-            className="pointer-events-auto cursor-pointer"
-            onPointerDown={(event) => {
-              if (!stage.panMode) event.stopPropagation();
-            }}
-            onClick={(event) => {
-              if (stage.panMode) return;
-              event.stopPropagation();
-              onSelect(index);
-            }}
-          />
-        );
-      })}
-    </svg>
-  );
-}
-
 function LayerTool({
   label,
   active,
@@ -201,8 +151,8 @@ function StageContent({
   showReviewedMask,
   showOriginal,
   showProposal,
-  showAllStrips,
-  onSelectTask,
+  showScan,
+  brushRadius,
   editContour,
   onContourChange,
   onContourStart,
@@ -215,8 +165,8 @@ function StageContent({
   showReviewedMask: boolean;
   showOriginal: boolean;
   showProposal: boolean;
-  showAllStrips: boolean;
-  onSelectTask: (index: number) => void;
+  showScan: boolean;
+  brushRadius: number;
   editContour: boolean;
   onContourChange: (points: Point[]) => void;
   onContourStart: () => void;
@@ -234,7 +184,7 @@ function StageContent({
   const imageId = workspace.document.image_id;
   const request = task ? workspace.requests[task.sample_id] : undefined;
   const primitives: MeasurePrimitive[] = [];
-  if (request) {
+  if (request && showScan) {
     const [a, b] = [request.strip.start_xy, request.strip.end_xy];
     primitives.push({
       kind: "caliper",
@@ -245,7 +195,12 @@ function StageContent({
       angle: Math.atan2(b[1] - a[1], b[0] - a[0]),
       tone: "signal",
     });
-    if (task?.crossing_px !== null && task?.crossing_px !== undefined) {
+    if (
+      showResults &&
+      task?.crossing_px !== null &&
+      task?.crossing_px !== undefined &&
+      task?.disposition === "approved"
+    ) {
       const [x, y] = pointAt(request, task.crossing_px);
       primitives.push({
         kind: "point",
@@ -253,7 +208,7 @@ function StageContent({
         y,
         cross: true,
         tone: task.disposition === "approved" ? "normal" : "warn",
-        label: "Reference",
+        label: "Contour reference",
       });
     }
     if (showResults && analysis) {
@@ -315,20 +270,12 @@ function StageContent({
           fill
         />
       )}
-      {showAllStrips && (
-        <StripOverview
-          workspace={workspace}
-          selectedIndex={workspace.document.tasks.findIndex(
-            (item) => item.sample_id === task?.sample_id,
-          )}
-          onSelect={onSelectTask}
-        />
-      )}
       <ContourLayer
         points={workspace.document.contour}
         onChange={onContourChange}
         onEditStart={onContourStart}
         editable={editContour}
+        brushRadius={brushRadius}
       />
       <MeasureOverlay
         nativeWidth={workspace.width}
@@ -352,14 +299,14 @@ export function App() {
   const [status, setStatus] = useState("Loading pilot…");
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [editContour, setEditContour] = useState(false);
+  const [editContour, setEditContour] = useState(true);
   const [showMask, setShowMask] = useState(false);
   const [showReviewedMask, setShowReviewedMask] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(true);
-  const [showProposal, setShowProposal] = useState(true);
-  const [showAllStrips, setShowAllStrips] = useState(true);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [showProposal, setShowProposal] = useState(false);
+  const [brushRadius, setBrushRadius] = useState(24);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [profileOpen, setProfileOpen] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<"review" | "settings">(
     "review",
   );
@@ -367,7 +314,7 @@ export function App() {
   const [resultsUnlocked, setResultsUnlocked] = useState(false);
   const [reviewValues, setReviewValues] = useState<RawValues>({
     reviewer: "",
-    default_uncertainty: "1",
+    contour_uncertainty_px: "1",
   });
   const etag = useRef("");
   const currentDocument = useRef<ReviewDocument | null>(null);
@@ -403,7 +350,7 @@ export function App() {
     setTaskIndex(0);
     setView(null);
     setShowResults(false);
-    setEditContour(false);
+    setEditContour(true);
     Promise.all([
       getJson<Workspace>(
         `/api/images/${encodeURIComponent(selected)}/workspace`,
@@ -418,7 +365,7 @@ export function App() {
         etag.current = next.etag;
         setReviewValues({
           reviewer: next.document.reviewer,
-          default_uncertainty: "1",
+          contour_uncertainty_px: String(next.document.contour_uncertainty_px),
         });
         setAnalysis(predictions);
         setResultsUnlocked(next.latest_revision !== null);
@@ -547,7 +494,9 @@ export function App() {
           Math.max(
             0,
             Math.min(
-              (document?.tasks.length ?? 1) - 1,
+              (document?.tasks.filter((item) =>
+                item.sample_id.includes(":contour:"),
+              ).length ?? 1) - 1,
               index + (event.key === "]" ? 1 : -1),
             ),
           ),
@@ -557,7 +506,10 @@ export function App() {
     return () => window.removeEventListener("keydown", handle);
   });
 
-  const task = document?.tasks[taskIndex];
+  const contourTasks =
+    document?.tasks.filter((item) => item.sample_id.includes(":contour:")) ??
+    [];
+  const task = contourTasks[taskIndex];
   const request = task ? workspace?.requests[task.sample_id] : undefined;
   const profile = task ? analysis?.profiles[task.sample_id] : undefined;
   const marks = useMemo(() => {
@@ -567,10 +519,15 @@ export function App() {
       label: string;
       tone: "normal" | "defect" | "muted";
     }[] = [];
-    if (task.crossing_px !== null)
+    if (
+      showResults &&
+      resultsUnlocked &&
+      task.crossing_px !== null &&
+      task.disposition === "approved"
+    )
       result.push({
         position: task.crossing_px,
-        label: task.disposition === "approved" ? "Reviewed" : "Draft",
+        label: "Contour reference",
         tone: "normal",
       });
     if (showResults && resultsUnlocked && analysis)
@@ -586,15 +543,6 @@ export function App() {
     return result;
   }, [task, showResults, resultsUnlocked, analysis]);
 
-  const setTask = (patch: Partial<TaskReview>) => {
-    if (!document || !task) return;
-    update({
-      ...document,
-      tasks: document.tasks.map((item, index) =>
-        index === taskIndex ? { ...item, ...patch } : item,
-      ),
-    });
-  };
   const approve = async () => {
     if (!selected || !document) return;
     try {
@@ -605,9 +553,20 @@ export function App() {
         undefined,
         etag.current,
       );
-      setWorkspace((current) =>
-        current ? { ...current, latest_revision: result.revision_id } : current,
-      );
+      const [next, frozenAnalysis] = await Promise.all([
+        getJson<Workspace>(
+          `/api/images/${encodeURIComponent(selected)}/workspace`,
+        ),
+        getJson<Analysis>(
+          `/api/images/${encodeURIComponent(selected)}/analysis`,
+        ),
+      ]);
+      setWorkspace(next);
+      setAnalysis(frozenAnalysis);
+      setDocument(next.document);
+      currentDocument.current = next.document;
+      etag.current = next.etag;
+      setDirty(false);
       setResultsUnlocked(true);
       setStatus(`Approved revision ${result.revision_id}`);
       setError("");
@@ -716,7 +675,7 @@ export function App() {
                       className="cb-thumb"
                       data-active={row.id === selected}
                       onClick={() => void navigate(row.id)}
-                      aria-label={`${row.name}, ${row.reviewed ? "reviewed" : "unreviewed"}, ${row.task_count} strips`}
+                      aria-label={`${row.name}, ${row.reviewed ? "reviewed" : "unreviewed"}`}
                     >
                       <img src={row.image_url} alt="" loading="lazy" />
                       <span className="cb-thumb-meta">
@@ -726,7 +685,7 @@ export function App() {
                             row.reviewed ? "text-normal" : "text-fg-muted"
                           }
                         >
-                          {row.reviewed ? "✓" : `${row.task_count}`}
+                          {row.reviewed ? "✓" : "○"}
                         </span>
                       </span>
                     </button>
@@ -775,8 +734,8 @@ export function App() {
                     showReviewedMask={showReviewedMask}
                     showOriginal={showOriginal}
                     showProposal={showProposal}
-                    showAllStrips={showAllStrips}
-                    onSelectTask={setTaskIndex}
+                    showScan={profileOpen}
+                    brushRadius={brushRadius}
                     editContour={editContour}
                     onContourStart={checkpoint}
                     onContourChange={(points) =>
@@ -802,7 +761,8 @@ export function App() {
             <div className="cb-profile" data-open={profileOpen}>
               <div className="cb-profile-head">
                 <span className="cb-label">
-                  Scan profile {task ? `· ${task.sample_id}` : ""}
+                  Scan profile{" "}
+                  {task ? `· ${taskIndex + 1} of ${contourTasks.length}` : ""}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="cb-mini text-xs text-fg-muted">
@@ -855,7 +815,7 @@ export function App() {
                   />
                 ) : (
                   <p className="px-3 pb-3 text-xs text-fg-muted">
-                    Select a strip to inspect its image signal.
+                    No scan available for this contour.
                   </p>
                 ))}
             </div>
@@ -880,20 +840,16 @@ export function App() {
                 aria-labelledby="inspector-tab-review"
               >
                 <div className="cb-section cb-review-intro">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">Visible edge review</p>
-                    <span className="cb-mini text-xs text-fg-muted">
-                      {
-                        document.tasks.filter(
-                          (item) => item.disposition !== "pending",
-                        ).length
-                      }
-                      /{document.tasks.length}
-                    </span>
-                  </div>
+                  <p className="text-sm font-semibold">Weld-region boundary</p>
+                  <p className="mt-2 text-xs text-fg-muted">
+                    The source mask isolates a weld region, including boundaries
+                    that may be visually ambiguous. Correct only defensible
+                    visible transitions; leave unsuitable images unapproved.
+                  </p>
                   {document.proposal_flags.length > 0 && (
                     <p className="mt-2 text-xs text-warn">
-                      Proposal flags · {document.proposal_flags.join(", ")}
+                      The automatic contour needs careful review, especially
+                      near corners.
                     </p>
                   )}
                 </div>
@@ -932,23 +888,41 @@ export function App() {
                       <ScanLine size={18} />
                     </LayerTool>
                     <LayerTool
-                      label="Edit reviewed contour"
+                      label="Reshape contour"
                       active={editContour}
                       onClick={() => setEditContour(!editContour)}
                     >
                       <Pencil size={18} />
                     </LayerTool>
-                    <LayerTool
-                      label="Show all review probes"
-                      active={showAllStrips}
-                      onClick={() => setShowAllStrips(!showAllStrips)}
-                    >
-                      <ChartLine size={18} />
-                    </LayerTool>
                   </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="mt-4">
+                    <label
+                      className="flex items-center justify-between gap-2 text-xs font-medium"
+                      htmlFor="brush-radius"
+                    >
+                      <span>Contour brush radius</span>
+                      <span className="cb-mini">{brushRadius} px</span>
+                    </label>
+                    <input
+                      id="brush-radius"
+                      className="cb-range mt-2"
+                      type="range"
+                      min={2}
+                      max={80}
+                      step={1}
+                      value={brushRadius}
+                      onChange={(event) =>
+                        setBrushRadius(Number(event.target.value))
+                      }
+                    />
+                    <p className="mt-1 text-xs text-fg-muted">
+                      Drag anywhere on the contour. Nearby points move smoothly
+                      with it.
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between gap-2">
                     <Checkbox
-                      label="Visible contour reviewed"
+                      label="I reviewed the visible boundary"
                       checked={document.contour_reviewed}
                       onCheckedChange={(value) =>
                         update({ ...document, contour_reviewed: value })
@@ -981,161 +955,58 @@ export function App() {
                   </div>
                 </div>
                 <div className="cb-section">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="cb-label">Review probes</p>
-                    <span className="text-xs text-fg-muted">
-                      {taskIndex + 1} / {document.tasks.length}
-                    </span>
-                  </div>
-                  <p className="mb-2 text-xs text-fg-muted">
-                    Up to four mask-proxy strips plus scans along the proposed
-                    contour. Refinement itself uses image gradients.
-                  </p>
-                  <div className="cb-strip-grid">
-                    {document.tasks.map((item, index) => (
-                      <button
-                        key={item.sample_id}
-                        className="cb-strip-button"
-                        data-active={index === taskIndex}
-                        data-disposition={item.disposition}
-                        onClick={() => setTaskIndex(index)}
-                        aria-label={`Probe ${index + 1}, ${item.sample_id}: ${item.disposition}`}
+                  <p className="cb-label mb-2">Signal inspection</p>
+                  <Switch
+                    label="Show one normal scan"
+                    description="Optional diagnostic. Approval reorients each usable scan to the reviewed contour."
+                    checked={profileOpen}
+                    onCheckedChange={setProfileOpen}
+                  />
+                  {profileOpen && contourTasks.length > 0 && (
+                    <div className="mt-4">
+                      <label
+                        htmlFor="scan-position"
+                        className="text-xs font-medium"
                       >
-                        {index + 1}
-                        {item.disposition === "approved"
-                          ? " ✓"
-                          : item.disposition === "excluded"
-                            ? " ×"
-                            : ""}
-                      </button>
-                    ))}
-                  </div>
-                  {task && request && (
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="cb-mini text-xs">
-                          {task.sample_id}
-                        </span>
-                        <Badge
-                          tone={
-                            task.disposition === "approved"
-                              ? "normal"
-                              : "neutral"
+                        Position along contour
+                      </label>
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          id="scan-position"
+                          className="cb-range min-w-0 flex-1"
+                          type="range"
+                          min={1}
+                          max={contourTasks.length}
+                          step={1}
+                          value={taskIndex + 1}
+                          onChange={(event) =>
+                            setTaskIndex(Number(event.target.value) - 1)
                           }
-                        >
-                          {task.disposition}
-                        </Badge>
-                      </div>
-                      <label className="block text-xs font-medium">
-                        Reference crossing · scan distance (px)
+                        />
                         <NumberInput
-                          className="mt-1"
-                          value={task.crossing_px ?? ""}
-                          min={0}
-                          max={stripLength(request)}
-                          step="any"
-                          onChange={(e) =>
-                            setTask({
-                              crossing_px:
-                                e.target.value === ""
-                                  ? null
-                                  : Number(e.target.value),
-                              disposition: "pending",
-                            })
+                          className="cb-index-input"
+                          aria-label="Scan number"
+                          min={1}
+                          max={contourTasks.length}
+                          step={1}
+                          value={taskIndex + 1}
+                          onChange={(event) =>
+                            setTaskIndex(
+                              Math.max(
+                                0,
+                                Math.min(
+                                  contourTasks.length - 1,
+                                  Number(event.target.value) - 1,
+                                ),
+                              ),
+                            )
                           }
                         />
-                      </label>
-                      <label className="block text-xs font-medium">
-                        Uncertainty (px)
-                        <NumberInput
-                          className="mt-1"
-                          value={task.uncertainty_px ?? ""}
-                          min={0.001}
-                          step="any"
-                          onChange={(e) =>
-                            setTask({
-                              uncertainty_px:
-                                e.target.value === ""
-                                  ? null
-                                  : Number(e.target.value),
-                              disposition: "pending",
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="block text-xs font-medium">
-                        Confidence
-                        <Select
-                          className="mt-1"
-                          value={task.confidence}
-                          onValueChange={(value) =>
-                            setTask({
-                              confidence: value as TaskReview["confidence"],
-                            })
-                          }
-                          options={[
-                            { value: "high", label: "High" },
-                            { value: "medium", label: "Medium" },
-                            { value: "low", label: "Low" },
-                          ]}
-                        />
-                      </label>
-                      <label className="block text-xs font-medium">
-                        Review note
-                        <Input
-                          className="mt-1"
-                          value={task.note}
-                          onChange={(e) => setTask({ note: e.target.value })}
-                        />
-                      </label>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          disabled={task.crossing_px === null}
-                          onClick={() =>
-                            setTask({
-                              disposition: "approved",
-                              uncertainty_px:
-                                task.uncertainty_px ??
-                                Number(reviewValues.default_uncertainty || 1),
-                            })
-                          }
-                        >
-                          Approve crossing
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            setTask({
-                              disposition: "excluded",
-                              note: task.note || "ambiguous_visible_edge",
-                            })
-                          }
-                        >
-                          Exclude
-                        </Button>
                       </div>
-                      <div className="flex justify-between">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={<ChevronLeft />}
-                          disabled={taskIndex === 0}
-                          onClick={() => setTaskIndex((index) => index - 1)}
-                        >
-                          Previous
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={<ChevronRight />}
-                          disabled={taskIndex === document.tasks.length - 1}
-                          onClick={() => setTaskIndex((index) => index + 1)}
-                        >
-                          Next
-                        </Button>
-                      </div>
+                      <p className="mt-2 text-xs text-fg-muted">
+                        {taskIndex + 1} of {contourTasks.length} candidate
+                        positions · diagnostic only
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1256,10 +1127,17 @@ export function App() {
                     values={reviewValues}
                     onChange={(next) => {
                       setReviewValues(next);
-                      if (next.reviewer !== reviewValues.reviewer)
+                      if (
+                        next.reviewer !== reviewValues.reviewer ||
+                        next.contour_uncertainty_px !==
+                          reviewValues.contour_uncertainty_px
+                      )
                         update({
                           ...document,
                           reviewer: String(next.reviewer ?? ""),
+                          contour_uncertainty_px: Number(
+                            next.contour_uncertainty_px,
+                          ),
                         });
                     }}
                   />
@@ -1271,6 +1149,11 @@ export function App() {
                     Image SHA-256: {document.source_image_sha256}
                   </p>
                   <p className="mt-1">{document.proposal_method}</p>
+                  {document.proposal_flags.length > 0 && (
+                    <p className="mt-1">
+                      Proposal diagnostics: {document.proposal_flags.join(", ")}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

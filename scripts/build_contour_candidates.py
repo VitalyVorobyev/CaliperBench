@@ -10,7 +10,7 @@ from PIL import Image
 from caliperbench.data import sha256
 from caliperbench.probes import contour_probes
 from caliperbench.refine import propose
-from caliperbench.schema import EdgeTruth, Provenance, Request, Sample, Strip
+from caliperbench.schema import Candidate, Provenance, Request, Strip
 
 DATASET_ID = "weld-profiles-2026"
 SOURCE = "https://zenodo.org/records/20301441"
@@ -37,7 +37,7 @@ def build(repository: Path, data_root: Path):
         counts[image_id] = len(probes)
         for ordinal, (_, start, end, crossing) in enumerate(probes, 1):
             samples.append(
-                Sample(
+                Candidate(
                     request=Request(
                         sample_id=f"{image_id}:contour:{ordinal:02d}",
                         image=f"raw/{DATASET_ID}/{image_path.name}",
@@ -61,12 +61,7 @@ def build(repository: Path, data_root: Path):
                         derivation="bounded active contour; uniform arc sampling; normal scan; single proposal crossing; not visible-edge ground truth",
                         group_id=image_id,
                     ),
-                    edge_truth=EdgeTruth(
-                        positions_px=[float(crossing)],
-                        uncertainty_px=1.0,
-                        method="active-contour proposal crossing; not visual-edge GT",
-                        confidence="low",
-                    ),
+                    proposal_crossing_px=float(crossing),
                 )
             )
     return samples, counts
@@ -76,7 +71,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=Path("data"))
     parser.add_argument(
-        "--output", type=Path, default=Path("data/annotations_weld_contour_candidates.jsonl")
+        "--output", type=Path, default=Path("data/annotations_weld_contour_candidates_v2.jsonl")
     )
     args = parser.parse_args()
     samples, counts = build(Path(__file__).resolve().parents[1], args.data_root)

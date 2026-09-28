@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { nearestSegment, pointAt, stripLength } from "./geometry";
+import {
+  deformContour,
+  nearestSegment,
+  pointAt,
+  stripLength,
+} from "./geometry";
 import type { Request } from "./api";
 
 const request: Request = {
@@ -25,5 +30,21 @@ describe("image-coordinate geometry", () => {
         [5, 2.4],
       ),
     ).toBe(0);
+  });
+  it("moves neighboring contour points with a bounded, cyclic brush", () => {
+    const points: [number, number][] = [
+      [10, 10],
+      [20, 10],
+      [30, 10],
+      [30, 20],
+      [20, 20],
+      [10, 20],
+    ];
+    const moved = deformContour(points, 0, [5, 0], 25, 40, 40);
+    expect(moved[0][0]).toBe(15);
+    expect(moved[1][0]).toBeGreaterThan(20);
+    expect(moved[5][0]).toBeGreaterThan(10);
+    expect(moved[3]).toEqual(points[3]);
+    expect(deformContour(points, 0, [-50, 0], 25, 40, 40)[0][0]).toBe(0);
   });
 });

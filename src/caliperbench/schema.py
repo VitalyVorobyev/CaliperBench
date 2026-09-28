@@ -105,6 +105,24 @@ class Sample(Contract):
         return self
 
 
+class Candidate(Contract):
+    """An unreviewed local proposal; deliberately has no truth track."""
+
+    request: Request
+    split: Literal["development", "validation", "test"]
+    provenance: Provenance
+    proposal_crossing_px: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def crossing_within_strip(self):
+        if (
+            self.proposal_crossing_px is not None
+            and self.proposal_crossing_px > self.request.strip.length
+        ):
+            raise ValueError("proposal crossing is outside strip")
+        return self
+
+
 class PhysicalPrediction(Contract):
     value: float = Field(gt=0)
     unit: Literal["mm", "um", "m"]

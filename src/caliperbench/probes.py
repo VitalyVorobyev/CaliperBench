@@ -5,6 +5,40 @@ import numpy as np
 from .refine import strip_crossings
 
 
+def normal_scan_at_crossing(contour, strip, crossing, width: int, height: int):
+    """Reorient a candidate scan to the local reviewed contour tangent."""
+    vertices = np.asarray(contour, dtype=float)
+    start = np.asarray(strip.start_xy, dtype=float)
+    end = np.asarray(strip.end_xy, dtype=float)
+    direction = end - start
+    length = float(np.linalg.norm(direction))
+    point = start + direction * (crossing / length)
+    segments = np.roll(vertices, -1, axis=0) - vertices
+    fractions = np.clip(
+        np.sum((point - vertices) * segments, axis=1)
+        / np.maximum(np.sum(segments * segments, axis=1), 1e-12),
+        0,
+        1,
+    )
+    nearest = vertices + segments * fractions[:, None]
+    index = int(np.argmin(np.sum((nearest - point) ** 2, axis=1)))
+    # A chord across neighboring vertices is more stable than a single polygon edge.
+    tangent = vertices[(index + 3) % len(vertices)] - vertices[(index - 2) % len(vertices)]
+    norm = float(np.linalg.norm(tangent))
+    if norm < 1e-9:
+        return None
+    normal = np.array([-tangent[1], tangent[0]]) / norm
+    if np.dot(normal, direction) < 0:
+        normal = -normal
+    a, b = point - length * normal / 2, point + length * normal / 2
+    if any(not (-0.5 <= p[0] <= width - 0.5 and -0.5 <= p[1] <= height - 0.5) for p in (a, b)):
+        return None
+    hits = strip_crossings(contour, tuple(a), tuple(b))
+    if len(hits) != 1:
+        return None
+    return strip.model_copy(update={"start_xy": tuple(a), "end_xy": tuple(b)}), hits[0]
+
+
 def contour_probes(contour, width: int, height: int, count: int = 32):
     """Evenly sample a closed contour; retain only unambiguous in-bounds normals."""
     vertices = np.asarray(contour, dtype=float)

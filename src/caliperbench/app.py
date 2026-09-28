@@ -61,15 +61,22 @@ def workspace(image_id: str):
         doc, etag = store.read(image_id)
         with Image.open(store.image_path(image_id)) as image:
             width, height = image.size
+        latest = store.latest(image_id)
+        frozen = (
+            {task.sample_id: task.frozen_request for task in latest[1].tasks if task.frozen_request}
+            if latest
+            else {}
+        )
         return {
             "document": doc,
             "etag": etag,
             "width": width,
             "height": height,
             "requests": {
-                s.request.sample_id: s.request.model_dump() for s in store.samples.get(image_id, [])
+                s.request.sample_id: (frozen.get(s.request.sample_id) or s.request).model_dump()
+                for s in store.samples.get(image_id, [])
             },
-            "latest_revision": store.latest(image_id)[0] if store.latest(image_id) else None,
+            "latest_revision": latest[0] if latest else None,
         }
     except KeyError:
         raise HTTPException(404, "unknown pilot image") from None
