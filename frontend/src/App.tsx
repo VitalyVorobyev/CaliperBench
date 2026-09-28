@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -47,12 +46,11 @@ import {
   type Analysis,
   type ImageRow,
   type Point,
-  type Report,
   type ReviewDocument,
   type TaskReview,
   type Workspace,
 } from "./api";
-import { pointAt, stripLength } from "./geometry";
+import { stripLength } from "./geometry";
 import { ContourLayer } from "./ContourLayer";
 import { canApproveReview } from "./reviewPolicy";
 
@@ -61,7 +59,7 @@ const reviewFields = describeFields({
     reviewer: {
       type: "string",
       title: "Reviewer",
-      description: "Name recorded in every approved revision",
+      description: "Name recorded in every frozen contour revision",
       "x-primary": true,
     },
     contour_uncertainty_px: {
@@ -76,17 +74,6 @@ const reviewFields = describeFields({
   },
   required: ["reviewer"],
 });
-const METHODS = [
-  "gradient_integer",
-  "gradient_parabolic",
-  "midpoint_crossing",
-] as const;
-const methodLabel: Record<string, string> = {
-  gradient_integer: "Integer gradient",
-  gradient_parabolic: "Parabolic gradient",
-  midpoint_crossing: "Midpoint crossing",
-};
-
 function ContourDisplay({
   points,
   color,
@@ -156,8 +143,6 @@ function StageContent({
   editContour,
   onContourChange,
   onContourStart,
-  showResults,
-  analysis,
 }: {
   workspace: Workspace;
   task: TaskReview | undefined;
@@ -170,8 +155,6 @@ function StageContent({
   editContour: boolean;
   onContourChange: (points: Point[]) => void;
   onContourStart: () => void;
-  showResults: boolean;
-  analysis: Analysis | null;
 }) {
   const stage = useStage();
   const fitted = useRef(false);
@@ -195,37 +178,6 @@ function StageContent({
       angle: Math.atan2(b[1] - a[1], b[0] - a[0]),
       tone: "signal",
     });
-    if (
-      showResults &&
-      task?.crossing_px !== null &&
-      task?.crossing_px !== undefined &&
-      task?.disposition === "approved"
-    ) {
-      const [x, y] = pointAt(request, task.crossing_px);
-      primitives.push({
-        kind: "point",
-        x,
-        y,
-        cross: true,
-        tone: task.disposition === "approved" ? "normal" : "warn",
-        label: "Contour reference",
-      });
-    }
-    if (showResults && analysis) {
-      METHODS.forEach((method) => {
-        const result = analysis.predictions[task!.sample_id]?.[method];
-        if (result?.status === "ok" && result.edges_px[0] !== undefined) {
-          const [x, y] = pointAt(request, result.edges_px[0]);
-          primitives.push({
-            kind: "point",
-            x,
-            y,
-            tone: method === "gradient_parabolic" ? "defect" : "muted",
-            label: methodLabel[method],
-          });
-        }
-      });
-    }
   }
   return (
     <>
@@ -293,7 +245,6 @@ export function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [document, setDocument] = useState<ReviewDocument | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [report, setReport] = useState<Report | null>(null);
   const [taskIndex, setTaskIndex] = useState(0);
   const [view, setView] = useState<StageView | null>(null);
   const [status, setStatus] = useState("Loading pilot…");
@@ -310,8 +261,6 @@ export function App() {
   const [inspectorTab, setInspectorTab] = useState<"review" | "settings">(
     "review",
   );
-  const [showResults, setShowResults] = useState(false);
-  const [resultsUnlocked, setResultsUnlocked] = useState(false);
   const [reviewValues, setReviewValues] = useState<RawValues>({
     reviewer: "",
     contour_uncertainty_px: "1",
@@ -323,12 +272,8 @@ export function App() {
   const redo = useRef<ReviewDocument[]>([]);
 
   const refreshIndex = useCallback(async () => {
-    const [rows, summary] = await Promise.all([
-      getJson<ImageRow[]>("/api/images"),
-      getJson<Report>("/api/report"),
-    ]);
+    const rows = await getJson<ImageRow[]>("/api/images");
     setImages(rows);
-    setReport(summary);
     return rows;
   }, []);
 
@@ -349,7 +294,6 @@ export function App() {
     setError("");
     setTaskIndex(0);
     setView(null);
-    setShowResults(false);
     setEditContour(true);
     Promise.all([
       getJson<Workspace>(
@@ -368,13 +312,12 @@ export function App() {
           contour_uncertainty_px: String(next.document.contour_uncertainty_px),
         });
         setAnalysis(predictions);
-        setResultsUnlocked(next.latest_revision !== null);
         setDirty(false);
         undo.current = [];
         redo.current = [];
         setStatus(
           next.latest_revision
-            ? `Approved revision ${next.latest_revision}`
+            ? `Frozen exploratory contour ${next.latest_revision}`
             : "Draft · unreviewed",
         );
       })
@@ -405,8 +348,6 @@ export function App() {
       setDocument(next);
       setDirty(true);
       setStatus("Unsaved changes");
-      setResultsUnlocked(false);
-      setShowResults(false);
     },
     [checkpoint],
   );
@@ -512,36 +453,6 @@ export function App() {
   const task = contourTasks[taskIndex];
   const request = task ? workspace?.requests[task.sample_id] : undefined;
   const profile = task ? analysis?.profiles[task.sample_id] : undefined;
-  const marks = useMemo(() => {
-    if (!task) return [];
-    const result: {
-      position: number;
-      label: string;
-      tone: "normal" | "defect" | "muted";
-    }[] = [];
-    if (
-      showResults &&
-      resultsUnlocked &&
-      task.crossing_px !== null &&
-      task.disposition === "approved"
-    )
-      result.push({
-        position: task.crossing_px,
-        label: "Contour reference",
-        tone: "normal",
-      });
-    if (showResults && resultsUnlocked && analysis)
-      METHODS.forEach((method) => {
-        const prediction = analysis.predictions[task.sample_id]?.[method];
-        if (prediction?.status === "ok" && prediction.edges_px[0] !== undefined)
-          result.push({
-            position: prediction.edges_px[0],
-            label: methodLabel[method],
-            tone: method === "gradient_parabolic" ? "defect" : "muted",
-          });
-      });
-    return result;
-  }, [task, showResults, resultsUnlocked, analysis]);
 
   const approve = async () => {
     if (!selected || !document) return;
@@ -567,26 +478,13 @@ export function App() {
       currentDocument.current = next.document;
       etag.current = next.etag;
       setDirty(false);
-      setResultsUnlocked(true);
-      setStatus(`Approved revision ${result.revision_id}`);
+      setStatus(`Frozen exploratory contour ${result.revision_id}`);
       setError("");
       await refreshIndex();
     } catch (e) {
       setError(String(e));
     }
   };
-  const exportApproved = async () => {
-    try {
-      const result = await sendJson<{ count: number; path: string }>(
-        "/api/export",
-        "POST",
-      );
-      setStatus(`Exported ${result.count} approved tasks to ${result.path}`);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   return (
     <TooltipProvider>
       <div className="cb-shell">
@@ -618,7 +516,7 @@ export function App() {
               disabled={!canApproveReview(document)}
               onClick={() => void approve()}
             >
-              Approve revision
+              Freeze contour
             </Button>
           </div>
         </header>
@@ -633,7 +531,8 @@ export function App() {
                 <div>
                   <p className="cb-label">Weld pilot</p>
                   <p className="text-xs text-fg-muted">
-                    {images.length} real images · {report?.images ?? 0} reviewed
+                    {images.length} real images ·{" "}
+                    {images.filter((row) => row.reviewed).length} frozen
                   </p>
                 </div>
               )}
@@ -699,18 +598,9 @@ export function App() {
                   >
                     {images.find((row) => row.id === selected)?.name ?? "—"}
                   </p>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-fg-muted">
-                    <span>
-                      {report?.approved_tasks ?? 0} approved crossings
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void exportApproved()}
-                    >
-                      Export
-                    </Button>
-                  </div>
+                  <p className="mt-2 text-xs text-fg-muted">
+                    Exploratory annotation · no benchmark export
+                  </p>
                 </div>
               </>
             )}
@@ -748,8 +638,6 @@ export function App() {
                         false,
                       )
                     }
-                    showResults={showResults && resultsUnlocked}
-                    analysis={analysis}
                   />
                 </ImageStage>
               ) : (
@@ -806,7 +694,7 @@ export function App() {
                         })),
                       },
                     ]}
-                    edges={marks}
+                    edges={[]}
                     xDomain={[0, stripLength(request)]}
                     yDomain={[0, 1]}
                     variant="wide"
@@ -844,7 +732,11 @@ export function App() {
                   <p className="mt-2 text-xs text-fg-muted">
                     The source mask isolates a weld region, including boundaries
                     that may be visually ambiguous. Correct only defensible
-                    visible transitions; leave unsuitable images unapproved.
+                    visible transitions; leave unsuitable images unfrozen.
+                  </p>
+                  <p className="mt-2 text-xs text-fg-muted">
+                    This collection has no valid caliper ground truth. Frozen
+                    contours stay local for exploratory review.
                   </p>
                   {document.proposal_flags.length > 0 && (
                     <p className="mt-2 text-xs text-warn">
@@ -922,7 +814,7 @@ export function App() {
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-2">
                     <Checkbox
-                      label="I reviewed the visible boundary"
+                      label="I inspected this contour"
                       checked={document.contour_reviewed}
                       onCheckedChange={(value) =>
                         update({ ...document, contour_reviewed: value })
@@ -958,7 +850,7 @@ export function App() {
                   <p className="cb-label mb-2">Signal inspection</p>
                   <Switch
                     label="Show one normal scan"
-                    description="Optional diagnostic. Approval reorients each usable scan to the reviewed contour."
+                    description="Optional diagnostic. Freezing reorients each usable scan to the edited contour."
                     checked={profileOpen}
                     onCheckedChange={setProfileOpen}
                   />
@@ -1010,107 +902,13 @@ export function App() {
                     </div>
                   )}
                 </div>
-                <div className="cb-section space-y-3">
-                  <p className="cb-label">Baseline comparison</p>
-                  <Switch
-                    label="Show textbook predictions"
-                    description={
-                      resultsUnlocked
-                        ? "Available after approval; hidden during editing"
-                        : "Approve this revision to unlock comparison"
-                    }
-                    checked={showResults && resultsUnlocked}
-                    disabled={!resultsUnlocked}
-                    onCheckedChange={setShowResults}
-                  />
-                  {showResults && resultsUnlocked && task && analysis && (
-                    <div className="rounded border border-line bg-raised p-2 text-xs">
-                      <p className="mb-1 font-medium">
-                        Selected strip · {task.sample_id}
-                      </p>
-                      {METHODS.map((method) => {
-                        const prediction =
-                          analysis.predictions[task.sample_id]?.[method];
-                        const error =
-                          prediction?.status === "ok" &&
-                          prediction.edges_px[0] !== undefined &&
-                          task.crossing_px !== null
-                            ? prediction.edges_px[0] - task.crossing_px
-                            : null;
-                        return (
-                          <p
-                            key={method}
-                            className="flex justify-between gap-2"
-                          >
-                            <span>{methodLabel[method]}</span>
-                            <span className="cb-mini">
-                              {error === null
-                                ? "failed"
-                                : `${error >= 0 ? "+" : ""}${error.toFixed(2)} px`}
-                            </span>
-                          </p>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {report && report.approved_tasks > 0 && (
-                    <div className="space-y-2 text-xs">
-                      <p className="font-medium">
-                        Reviewed reference · {report.approved_tasks} crossings
-                      </p>
-                      {METHODS.map((method) => (
-                        <div key={method} className="border-b border-line pb-1">
-                          <div className="flex justify-between gap-2">
-                            <span>{methodLabel[method]}</span>
-                            <span className="cb-mini">
-                              {report.methods[method]?.mae_px?.toFixed(2) ??
-                                "—"}{" "}
-                              px MAE
-                            </span>
-                          </div>
-                          <p className="text-fg-muted">
-                            Bias{" "}
-                            {report.methods[method]?.bias_px?.toFixed(2) ?? "—"}{" "}
-                            px · failure{" "}
-                            {(
-                              (report.methods[method]?.failure_rate ?? 0) * 100
-                            ).toFixed(1)}
-                            % ·{" "}
-                            {report.methods[method]?.median_runtime_ms?.toFixed(
-                              2,
-                            ) ?? "—"}{" "}
-                            ms
-                          </p>
-                        </div>
-                      ))}
-                      <p className="text-fg-muted">
-                        Reviewer-assigned uncertainty: mean{" "}
-                        {report.reviewer_uncertainty_px.mean?.toFixed(2) ?? "—"}{" "}
-                        px. This is not measured agreement.
-                      </p>
-                    </div>
-                  )}
-                  {report && (
-                    <div className="border-t border-line pt-2 text-xs text-fg-muted">
-                      <p className="font-medium">
-                        Exploratory mask proxy ·{" "}
-                        {report.mask_proxy_context.tasks} tasks
-                      </p>
-                      {METHODS.map((method) => (
-                        <p key={method}>
-                          {methodLabel[method]}:{" "}
-                          {report.mask_proxy_context.methods[
-                            method
-                          ]?.mae_px.toFixed(2)}{" "}
-                          px MAE
-                        </p>
-                      ))}
-                      <p>
-                        Different, unreviewed reference and sample count; for
-                        context only.
-                      </p>
-                    </div>
-                  )}
+                <div className="cb-section text-xs text-fg-muted">
+                  <p className="cb-label mb-2">Dataset status</p>
+                  <p>
+                    The source mask labels a weld region. It supplies neither
+                    precise optical edges nor physical dimensions. Benchmark
+                    scoring is disabled for this collection.
+                  </p>
                 </div>
               </div>
             )}

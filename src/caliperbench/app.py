@@ -10,7 +10,6 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-from pydantic import BaseModel
 
 from .review import Conflict, ReviewDocument, ReviewStore
 
@@ -125,7 +124,8 @@ def reviewed_mask(image_id: str, revision_id: int):
 
 @app.get("/api/report")
 def report():
-    samples = store.export_samples()
+    # The weld collection is an annotation experiment, not a scored benchmark.
+    samples = []
     by_image = {}
     for sample in samples:
         image_id = Path(sample.request.image).stem
@@ -157,7 +157,7 @@ def report():
         }
     proxy = json.loads((REPOSITORY / "registry/weld-mask-proxy-summary.json").read_text())
     return {
-        "reference": "single-reviewer-visible-edge",
+        "reference": "none-weld-exploratory",
         "images": len(by_image),
         "approved_tasks": len(samples),
         "reviewer_uncertainty_px": {
@@ -170,18 +170,9 @@ def report():
     }
 
 
-class ExportResponse(BaseModel):
-    count: int
-    path: str
-
-
-@app.post("/api/export", response_model=ExportResponse)
+@app.post("/api/export")
 def export():
-    samples = store.export_samples()
-    destination = DATA_ROOT / "review" / "approved_samples.jsonl"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text("".join(sample.model_dump_json() + "\n" for sample in samples))
-    return ExportResponse(count=len(samples), path=str(destination))
+    raise HTTPException(409, "weld masks are proposals; benchmark export is disabled")
 
 
 frontend = REPOSITORY / "frontend/dist"

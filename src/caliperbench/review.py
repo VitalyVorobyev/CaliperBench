@@ -380,6 +380,12 @@ class ReviewStore:
         return (row[0], ReviewDocument.model_validate_json(row[1])) if row else None
 
     def export_samples(self) -> list[Sample]:
+        raise ValueError(
+            "weld-region masks are not caliper ground truth; benchmark export is disabled"
+        )
+
+    def _exploratory_samples(self) -> list[Sample]:
+        """Internal geometry diagnostic; never a benchmark export path."""
         exported = []
         for image_id in self.assets:
             latest = self.latest(image_id)
@@ -406,13 +412,13 @@ class ReviewStore:
                             source_image_id=proxy.provenance.source_image_id,
                             annotator=doc.reviewer,
                             annotation_version=f"review-revision-{revision_id}",
-                            derivation=f"single-reviewer contour; frozen normal scan and crossing derived geometrically; revision={revision_id}; sha256={digest(doc)}",
+                            derivation=f"exploratory weld contour proxy, not benchmark eligible; frozen normal scan and crossing derived geometrically; revision={revision_id}; sha256={digest(doc)}",
                             group_id=proxy.provenance.group_id,
                         ),
                         edge_truth=EdgeTruth(
                             positions_px=[task.crossing_px],
                             uncertainty_px=task.uncertainty_px,
-                            method="single-reviewer-contour-derived-edge",
+                            method="exploratory-contour-proxy-not-ground-truth",
                             confidence=task.confidence,
                         ),
                     )

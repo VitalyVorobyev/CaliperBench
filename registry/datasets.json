@@ -348,11 +348,11 @@
         "calibration": "fixed camera setup described, no metric calibration supplied",
         "cad": false,
         "physical": null,
-        "edge": "binary weld-region masks; only coarse boundary proxy"
+        "edge": "none for caliper evaluation; supplied weld-region masks are segmentation labels only"
       },
-      "relabeling_strategy": "Inspect native photos; draw reviewed visible transitions. Automatic top-of-mask crossings are low-confidence development-only proxy tasks.",
+      "relabeling_strategy": "Keep as exploratory image/annotation workflow data. Do not score masks or whole contour as caliper ground truth. Reconsider only selected visible boundary segments after independent review and a documented edge definition.",
       "redistribution_constraints": "CC BY 4.0 attribution; cite Zenodo record and identify derived labels.",
-      "priority": "P2",
+      "priority": "P3",
       "access_status": "publisher_files_accessible",
       "download_enabled": true,
       "download_hosts": [
@@ -363,7 +363,8 @@
         "https://zenodo.org/api/records/20301441"
       ],
       "verified_on": "2026-09-26",
-      "verification_scope": "Publisher API metadata, license, 98 file sizes and MD5 hashes verified; local download adapter verifies each file. Mask semantics inspected on a small visual sample, not all boundaries adjudicated."
+      "verification_scope": "Publisher API metadata, license, 98 file sizes and MD5 hashes verified; local download adapter verifies each file. Mask semantics inspected on a small visual sample, not all boundaries adjudicated.",
+      "benchmark_eligibility": "exploratory_only"
     }
   ]
 }

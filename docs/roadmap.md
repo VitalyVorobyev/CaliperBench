@@ -2,7 +2,7 @@
 
 ## Status
 
-The Python registry, cache tooling, v1 benchmark JSONL, three textbook baselines, scorer, tests and CI are implemented. Ten real-data sources are registered. The local weld collection has 49 verified images and 185 low-confidence mask-proxy tasks. A deterministic 12-image subset, classical contour proposals, a local React review app, SQLite drafts and immutable approvals are implemented. **No human-reviewed edge reference or published benchmark split exists yet.**
+The Python registry, cache tooling, v1 benchmark JSONL, three textbook baselines, scorer, tests and CI are implemented. Ten real-data sources are registered. The local weld collection has 49 verified images and 185 low-confidence mask-proxy tasks. A deterministic 12-image subset, classical contour proposals, a local React review app, SQLite drafts and immutable approvals are implemented. **Weld is exploratory only; its source masks are not caliper ground truth and benchmark export is blocked. No eligible benchmark split exists yet.**
 
 The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms`, `/charts`, and `/stage2d`; reusable contour and raster-mask interaction is proposed upstream in [lab-ui PR #36](https://github.com/VitalyVorobyev/lab-ui/pull/36). The current app edits contour-derived masks; freehand raster painting remains an optional later workflow. [visual-anomaly-lab](https://github.com/VitalyVorobyev/visual-anomaly-lab) informed browsing and revision behavior. CaliperBench owns its review workflow, persistence and benchmark projection.
 
@@ -10,17 +10,17 @@ The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms
 
 The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance. A deterministic local generator adds 291 normal scan candidates along those proposals; the original mask-proxy samples remain separately identified. Active-contour refinement itself does not use caliper strips.
 
-The local app browses image thumbnails in a foldable panel, displays source/refined/reviewed contours and masks, reshapes neighboring contour vertices with an adjustable brush, offers a single optional normal scan and collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes approvals. Reviewer defaults sit in a settings tab. Predictions unlock after approval. An approved-revision exporter preserves the existing black-box JSONL protocol. No approval is generated automatically.
+The local app browses image thumbnails in a foldable panel, displays source/refined/reviewed contours and masks, reshapes neighboring contour vertices with an adjustable brush, offers a single optional normal scan and collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes exploratory contours. Reviewer settings sit in a separate tab. No weld-derived benchmark export is available.
 
-The current CI covers deterministic refinement, crossings, revision conflicts, approved-only export, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
+The current CI covers deterministic refinement, crossings, revision conflicts, weld-export blocking, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
 
-## Next — human review and visual acceptance
+## Next — physically grounded pilot
 
-Have one reviewer inspect all 12 images, edit the visible contour, assign a contour uncertainty, and freeze suitable revisions. Normal scan requests and geometric crossings are generated from the frozen contour and stored in the immutable revision. Exclude images or boundary portions that do not show a defensible visible transition before any public release. An external reviewer must still verify the app’s visual alignment and interaction quality at normal and high zoom, on a narrow window and with keyboard navigation. Record failures and any needed refinements before calling the pilot ready.
+Start with [Apple Fruitlet Sizing 2026](https://data.mendeley.com/datasets/k45nnfjydt/1), whose public description lists rectified stereo images, stereo calibration and ground-truth caliper measurements. First inspect the archive and verify source rights, image-to-fruit IDs, measurement axes, camera parameters and units. Select a small, diverse set with unambiguous object-to-measurement matching; keep all files local. Implement the physical truth track before claiming millimeter accuracy. Visible edge localization remains a separate annotation task.
 
-Compare approved references against all three existing baselines. Report edge MAE, bias, detection failures, runtime, reviewer-assigned uncertainty and image-group counts. Keep the 185 mask-proxy tasks as exploratory diagnostics, never substitute them for reviewed references. Do not report width/center or physical error until those truth tracks have real observations.
+Keep the weld browser as an exploratory annotation and difficult-image tool. Do not review all 12 masks as if a closed weld-region contour were a visible edge. A future weld edge subset requires an explicit visible-boundary definition, segment-level inclusion/exclusion, and independent review before eligibility changes.
 
-**Gate:** user confirms overlay alignment, contour editing, suitability of each visible boundary, and reproducible report on accepted images. The weld masks also include ambiguous internal region boundaries; this source may remain an exploratory subset rather than a core caliper benchmark. A one-reviewer pilot does not establish inter-reviewer agreement.
+**Gate:** a source image, object ID, calibration record and physical caliper reading are traceably linked for each physical sample. No proxy mask is substituted for that measurement.
 
 ## Later — broaden truth tracks and supported app
 

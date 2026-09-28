@@ -137,7 +137,9 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     document, etag = store.read("demo")
     assert document.schema_version == 2
     assert not document.contour_reviewed
-    assert store.export_samples() == []
+    with pytest.raises(ValueError, match="benchmark export is disabled"):
+        store.export_samples()
+    assert store._exploratory_samples() == []
     assert document.tasks[0].disposition == "pending"
     document.proposal_flags.append("tampered")
     with pytest.raises(ValueError, match="evidence"):
@@ -160,10 +162,10 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     assert raster.shape == (36, 40)
     assert raster[20, 20] == 255
     assert raster[0, 0] == 0
-    exported = store.export_samples()
+    exported = store._exploratory_samples()
     assert len(exported) == 1
     assert exported[0].request.sample_id == "demo:contour:01"
-    assert exported[0].edge_truth.method == "single-reviewer-contour-derived-edge"
+    assert exported[0].edge_truth.method == "exploratory-contour-proxy-not-ground-truth"
     assert exported[0].edge_truth.uncertainty_px == 0.75
     document, approved_etag = store.read("demo")
     document.reviewer = "second-reviewer"
@@ -171,4 +173,4 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     assert store.latest("demo")[1].reviewer == "pilot-reviewer"
     assert store.latest("demo")[1].tasks[0].disposition == "excluded"
     assert store.latest("demo")[1].tasks[1].disposition == "approved"
-    assert len(store.export_samples()) == 1
+    assert len(store._exploratory_samples()) == 1

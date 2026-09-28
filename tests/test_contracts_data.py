@@ -77,6 +77,8 @@ def test_registry_evidence_and_schema_examples():
     entries = json.loads((root / "registry/datasets.json").read_text())["datasets"]
     assert len(entries) == len({e["id"] for e in entries})
     assert {"amodal-apple", "itodd-bop", "weld-profiles-2026"} <= {e["id"] for e in entries}
+    weld = next(e for e in entries if e["id"] == "weld-profiles-2026")
+    assert weld["benchmark_eligibility"] == "exploratory_only"
     for entry in entries:
         assert entry["license"]["evidence_url"] in entry["evidence_urls"]
         assert entry["verified_on"] and entry["relabeling_strategy"]
