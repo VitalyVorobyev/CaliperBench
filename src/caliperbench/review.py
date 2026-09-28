@@ -12,7 +12,7 @@ from typing import Literal
 
 import numpy as np
 from PIL import Image
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from skimage.draw import polygon2mask
 
 from .baseline import METHODS, _profile, predict
@@ -36,6 +36,11 @@ class TaskReview(Strict):
     frozen_request: Request | None = None
 
 
+class ContourEdit(Strict):
+    method: Literal["specimen_silhouette", "manual_trace", "edge_snap"]
+    parameters: dict = Field(default_factory=dict)
+
+
 class ReviewDocument(Strict):
     schema_version: Literal[1, 2] = 2
     image_id: str
@@ -48,6 +53,8 @@ class ReviewDocument(Strict):
     source_contour: list[tuple[float, float]]
     proposed_contour: list[tuple[float, float]]
     contour: list[tuple[float, float]]
+    contour_target: Literal["weld_region", "visible_specimen"] = "weld_region"
+    contour_edits: list[ContourEdit] = Field(default_factory=list)
     contour_reviewed: bool = False
     contour_uncertainty_px: float = 1.0
     tasks: list[TaskReview]
@@ -306,6 +313,13 @@ class ReviewStore:
             with Image.open(self.image_path(image_id)) as source_image:
                 width, height = source_image.size
             for task in doc.tasks:
+                if doc.contour_target == "visible_specimen":
+                    task.disposition = "excluded"
+                    task.note = "weld_scan_not_applicable_to_specimen_outline"
+                    task.crossing_px = None
+                    task.uncertainty_px = None
+                    task.frozen_request = None
+                    continue
                 if ":contour:" not in task.sample_id:
                     task.disposition = "excluded"
                     task.note = "legacy_mask_proxy_only"

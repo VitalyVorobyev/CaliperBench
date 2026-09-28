@@ -13,11 +13,13 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
+  PenLine,
   Pencil,
   RotateCcw,
   RotateCw,
   Save,
   ScanLine,
+  Sparkles,
 } from "lucide-react";
 import {
   Button,
@@ -51,7 +53,7 @@ import {
   type Workspace,
 } from "./api";
 import { stripLength } from "./geometry";
-import { ContourLayer } from "./ContourLayer";
+import { ContourLayer, SketchLayer } from "./ContourLayer";
 import { canApproveReview } from "./reviewPolicy";
 
 const reviewFields = describeFields({
@@ -143,6 +145,8 @@ function StageContent({
   editContour,
   onContourChange,
   onContourStart,
+  sketchPoints,
+  onSketchPoint,
 }: {
   workspace: Workspace;
   task: TaskReview | undefined;
@@ -155,6 +159,8 @@ function StageContent({
   editContour: boolean;
   onContourChange: (points: Point[]) => void;
   onContourStart: () => void;
+  sketchPoints: Point[] | null;
+  onSketchPoint: (point: Point) => void;
 }) {
   const stage = useStage();
   const fitted = useRef(false);
@@ -235,6 +241,9 @@ function StageContent({
         primitives={primitives}
         strokeScale={stage.view.scale}
       />
+      {sketchPoints && (
+        <SketchLayer points={sketchPoints} onPoint={onSketchPoint} />
+      )}
     </>
   );
 }
@@ -256,6 +265,10 @@ export function App() {
   const [showOriginal, setShowOriginal] = useState(false);
   const [showProposal, setShowProposal] = useState(false);
   const [brushRadius, setBrushRadius] = useState(24);
+  const [snapRadius, setSnapRadius] = useState(5);
+  const [sketchPoints, setSketchPoints] = useState<Point[] | null>(null);
+  const [proposalNote, setProposalNote] = useState("");
+  const [refining, setRefining] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<"review" | "settings">(
@@ -295,6 +308,8 @@ export function App() {
     setTaskIndex(0);
     setView(null);
     setEditContour(true);
+    setSketchPoints(null);
+    setProposalNote("");
     Promise.all([
       getJson<Workspace>(
         `/api/images/${encodeURIComponent(selected)}/workspace`,
@@ -448,8 +463,9 @@ export function App() {
   });
 
   const contourTasks =
-    document?.tasks.filter((item) => item.sample_id.includes(":contour:")) ??
-    [];
+    document?.contour_target === "weld_region"
+      ? document.tasks.filter((item) => item.sample_id.includes(":contour:"))
+      : [];
   const task = contourTasks[taskIndex];
   const request = task ? workspace?.requests[task.sample_id] : undefined;
   const profile = task ? analysis?.profiles[task.sample_id] : undefined;
@@ -484,6 +500,93 @@ export function App() {
     } catch (e) {
       setError(String(e));
     }
+  };
+  const useSpecimenProposal = async () => {
+    if (!selected || !document || refining) return;
+    const imageId = selected;
+    setRefining(true);
+    try {
+      const proposal = await getJson<{
+        refined_contour: Point[];
+        flags: string[];
+        parameters: Record<string, unknown>;
+      }>(`/api/images/${encodeURIComponent(imageId)}/specimen-proposal`);
+      if (currentDocument.current !== document) return;
+      update({
+        ...document,
+        contour: proposal.refined_contour,
+        contour_target: "visible_specimen",
+        contour_edits: [
+          ...document.contour_edits,
+          { method: "specimen_silhouette", parameters: proposal.parameters },
+        ],
+        contour_reviewed: false,
+      });
+      setProposalNote(
+        `Visible-specimen proposal loaded. ${proposal.flags.includes("specimen_touches_frame") ? "The specimen touches the frame; that clipped segment is not a measurable edge." : "Inspect all boundaries before freezing."}`,
+      );
+      setSketchPoints(null);
+      setEditContour(true);
+      setProfileOpen(false);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRefining(false);
+    }
+  };
+  const snapContour = async () => {
+    if (!selected || !document || refining) return;
+    const imageId = selected;
+    setRefining(true);
+    try {
+      const proposal = await sendJson<{
+        refined_contour: Point[];
+        flags: string[];
+        parameters: Record<string, unknown>;
+      }>(`/api/images/${encodeURIComponent(imageId)}/snap`, "POST", {
+        contour: document.contour,
+        radius_px: snapRadius,
+      });
+      if (currentDocument.current !== document) return;
+      update({
+        ...document,
+        contour: proposal.refined_contour,
+        contour_edits: [
+          ...document.contour_edits,
+          { method: "edge_snap", parameters: proposal.parameters },
+        ],
+        contour_reviewed: false,
+      });
+      setProposalNote(
+        `Snapped within ${snapRadius} px. ${proposal.flags.length ? "Some segments have weak or distant edges; inspect them." : "Review the result, especially at corners."}`,
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRefining(false);
+    }
+  };
+  const finishSketch = () => {
+    if (!document || !sketchPoints || sketchPoints.length < 3) return;
+    update({
+      ...document,
+      contour: sketchPoints,
+      contour_target: "visible_specimen",
+      contour_edits: [
+        ...document.contour_edits,
+        {
+          method: "manual_trace",
+          parameters: { point_count: sketchPoints.length },
+        },
+      ],
+      contour_reviewed: false,
+    });
+    setSketchPoints(null);
+    setEditContour(true);
+    setProfileOpen(false);
+    setProposalNote(
+      "Coarse outline loaded. Use Snap to visible edge, then inspect and correct it.",
+    );
   };
   return (
     <TooltipProvider>
@@ -628,6 +731,12 @@ export function App() {
                     brushRadius={brushRadius}
                     editContour={editContour}
                     onContourStart={checkpoint}
+                    sketchPoints={sketchPoints}
+                    onSketchPoint={(point) =>
+                      setSketchPoints((points) =>
+                        points ? [...points, point] : null,
+                      )
+                    }
                     onContourChange={(points) =>
                       update(
                         {
@@ -728,11 +837,15 @@ export function App() {
                 aria-labelledby="inspector-tab-review"
               >
                 <div className="cb-section cb-review-intro">
-                  <p className="text-sm font-semibold">Weld-region boundary</p>
+                  <p className="text-sm font-semibold">
+                    {document.contour_target === "visible_specimen"
+                      ? "Visible specimen outline"
+                      : "Weld-region proposal"}
+                  </p>
                   <p className="mt-2 text-xs text-fg-muted">
-                    The source mask isolates a weld region, including boundaries
-                    that may be visually ambiguous. Correct only defensible
-                    visible transitions; leave unsuitable images unfrozen.
+                    The source mask marks weld material, not the entire metal
+                    specimen. Start with an automatic silhouette or trace a
+                    coarse outline; then snap it to nearby visible edges.
                   </p>
                   <p className="mt-2 text-xs text-fg-muted">
                     This collection has no valid caliper ground truth. Frozen
@@ -786,6 +899,88 @@ export function App() {
                     >
                       <Pencil size={18} />
                     </LayerTool>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    <Button
+                      size="sm"
+                      icon={<ImageIcon />}
+                      disabled={refining}
+                      onClick={() => void useSpecimenProposal()}
+                    >
+                      Suggest visible silhouette
+                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {sketchPoints ? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={sketchPoints.length < 3}
+                            onClick={finishSketch}
+                          >
+                            Close outline ({sketchPoints.length})
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSketchPoints(null);
+                              setEditContour(true);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          icon={<PenLine />}
+                          onClick={() => {
+                            setSketchPoints([]);
+                            setEditContour(false);
+                          }}
+                        >
+                          Trace coarse outline
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-fg-muted">
+                      {sketchPoints
+                        ? "Click around the specimen; use Close outline after at least three points."
+                        : "Automatic and traced outlines are editable proposals, not ground truth."}
+                    </p>
+                  </div>
+                  <div className="mt-4 border-t border-line pt-4">
+                    <label
+                      htmlFor="snap-radius"
+                      className="flex items-center justify-between gap-2 text-xs font-medium"
+                    >
+                      <span>Snap search radius</span>
+                      <span className="cb-mini">{snapRadius} px</span>
+                    </label>
+                    <input
+                      id="snap-radius"
+                      className="cb-range mt-2"
+                      type="range"
+                      min={1}
+                      max={20}
+                      step={1}
+                      value={snapRadius}
+                      onChange={(event) =>
+                        setSnapRadius(Number(event.target.value))
+                      }
+                    />
+                    <Button
+                      size="sm"
+                      icon={<Sparkles />}
+                      disabled={refining || Boolean(sketchPoints)}
+                      onClick={() => void snapContour()}
+                    >
+                      Snap to visible edge
+                    </Button>
+                    {proposalNote && (
+                      <p className="mt-2 text-xs text-fg-muted" role="status">
+                        {proposalNote}
+                      </p>
+                    )}
                   </div>
                   <div className="mt-4">
                     <label
@@ -846,62 +1041,69 @@ export function App() {
                     </div>
                   </div>
                 </div>
-                <div className="cb-section">
-                  <p className="cb-label mb-2">Signal inspection</p>
-                  <Switch
-                    label="Show one normal scan"
-                    description="Optional diagnostic. Freezing reorients each usable scan to the edited contour."
-                    checked={profileOpen}
-                    onCheckedChange={setProfileOpen}
-                  />
-                  {profileOpen && contourTasks.length > 0 && (
-                    <div className="mt-4">
-                      <label
-                        htmlFor="scan-position"
-                        className="text-xs font-medium"
-                      >
-                        Position along contour
-                      </label>
-                      <div className="mt-2 flex items-center gap-2">
-                        <input
-                          id="scan-position"
-                          className="cb-range min-w-0 flex-1"
-                          type="range"
-                          min={1}
-                          max={contourTasks.length}
-                          step={1}
-                          value={taskIndex + 1}
-                          onChange={(event) =>
-                            setTaskIndex(Number(event.target.value) - 1)
-                          }
-                        />
-                        <NumberInput
-                          className="cb-index-input"
-                          aria-label="Scan number"
-                          min={1}
-                          max={contourTasks.length}
-                          step={1}
-                          value={taskIndex + 1}
-                          onChange={(event) =>
-                            setTaskIndex(
-                              Math.max(
-                                0,
-                                Math.min(
-                                  contourTasks.length - 1,
-                                  Number(event.target.value) - 1,
+                {document.contour_target === "weld_region" ? (
+                  <div className="cb-section">
+                    <p className="cb-label mb-2">Signal inspection</p>
+                    <Switch
+                      label="Show one normal scan"
+                      description="Optional diagnostic. Freezing reorients each usable scan to the edited contour."
+                      checked={profileOpen}
+                      onCheckedChange={setProfileOpen}
+                    />
+                    {profileOpen && contourTasks.length > 0 && (
+                      <div className="mt-4">
+                        <label
+                          htmlFor="scan-position"
+                          className="text-xs font-medium"
+                        >
+                          Position along contour
+                        </label>
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            id="scan-position"
+                            className="cb-range min-w-0 flex-1"
+                            type="range"
+                            min={1}
+                            max={contourTasks.length}
+                            step={1}
+                            value={taskIndex + 1}
+                            onChange={(event) =>
+                              setTaskIndex(Number(event.target.value) - 1)
+                            }
+                          />
+                          <NumberInput
+                            className="cb-index-input"
+                            aria-label="Scan number"
+                            min={1}
+                            max={contourTasks.length}
+                            step={1}
+                            value={taskIndex + 1}
+                            onChange={(event) =>
+                              setTaskIndex(
+                                Math.max(
+                                  0,
+                                  Math.min(
+                                    contourTasks.length - 1,
+                                    Number(event.target.value) - 1,
+                                  ),
                                 ),
-                              ),
-                            )
-                          }
-                        />
+                              )
+                            }
+                          />
+                        </div>
+                        <p className="mt-2 text-xs text-fg-muted">
+                          {taskIndex + 1} of {contourTasks.length} candidate
+                          positions · diagnostic only
+                        </p>
                       </div>
-                      <p className="mt-2 text-xs text-fg-muted">
-                        {taskIndex + 1} of {contourTasks.length} candidate
-                        positions · diagnostic only
-                      </p>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="cb-section text-xs text-fg-muted">
+                    No scan is generated from this silhouette until visible
+                    segments are selected.
+                  </div>
+                )}
                 <div className="cb-section text-xs text-fg-muted">
                   <p className="cb-label mb-2">Dataset status</p>
                   <p>

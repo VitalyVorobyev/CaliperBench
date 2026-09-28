@@ -3,6 +3,55 @@ import { imageViewBox, useStage } from "@vitavision/stage2d";
 import type { Point } from "./api";
 import { deformContour, nearestSegment } from "./geometry";
 
+export function SketchLayer({
+  points,
+  onPoint,
+}: {
+  points: Point[];
+  onPoint: (point: Point) => void;
+}) {
+  const stage = useStage();
+  return (
+    <svg
+      viewBox={imageViewBox(stage.image)}
+      className="absolute inset-0 h-full w-full cursor-crosshair overflow-visible"
+      aria-label="Click image to trace a coarse specimen outline"
+    >
+      <rect
+        x={0}
+        y={0}
+        width={stage.image.width}
+        height={stage.image.height}
+        fill="transparent"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.stopPropagation();
+          const point = stage.toImage({ x: event.clientX, y: event.clientY });
+          onPoint([point.x, point.y]);
+        }}
+      />
+      <polyline
+        points={points.map(([x, y]) => `${x},${y}`).join(" ")}
+        fill="none"
+        stroke="var(--signal)"
+        strokeWidth={stage.imageLength(2)}
+        strokeDasharray="5 3"
+        pointerEvents="none"
+      />
+      {points.map(([x, y], index) => (
+        <circle
+          key={index}
+          cx={x}
+          cy={y}
+          r={stage.imageLength(3)}
+          fill="var(--signal)"
+          pointerEvents="none"
+        />
+      ))}
+    </svg>
+  );
+}
+
 /** App adapter until the reusable ContourEditor lands in @vitavision/stage2d. */
 export function ContourLayer({
   points,

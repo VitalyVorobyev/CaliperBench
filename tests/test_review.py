@@ -8,7 +8,7 @@ from PIL import Image
 from caliperbench.data import sha256
 from caliperbench.probes import contour_probes, normal_scan_at_crossing
 from caliperbench.refine import propose, strip_crossings
-from caliperbench.review import Conflict, ReviewStore, digest
+from caliperbench.review import Conflict, ContourEdit, ReviewStore, digest
 from caliperbench.schema import Candidate, EdgeTruth, Provenance, Request, Sample, Strip
 
 
@@ -169,8 +169,14 @@ def test_review_revisions_conflicts_and_export(tmp_path):
     assert exported[0].edge_truth.uncertainty_px == 0.75
     document, approved_etag = store.read("demo")
     document.reviewer = "second-reviewer"
-    store.save("demo", document, approved_etag)
+    document.contour_target = "visible_specimen"
+    document.contour_edits.append(ContourEdit(method="edge_snap", parameters={"radius_px": 5}))
+    specimen_etag = store.save("demo", document, approved_etag)
+    assert store.read("demo")[0].contour_target == "visible_specimen"
+    assert store.read("demo")[0].contour_edits[-1].parameters["radius_px"] == 5
     assert store.latest("demo")[1].reviewer == "pilot-reviewer"
     assert store.latest("demo")[1].tasks[0].disposition == "excluded"
     assert store.latest("demo")[1].tasks[1].disposition == "approved"
     assert len(store._exploratory_samples()) == 1
+    assert store.approve("demo", specimen_etag)["derived_crossings"] == 0
+    assert all(task.disposition == "excluded" for task in store.latest("demo")[1].tasks)

@@ -20,6 +20,11 @@ export type ReviewDocument = {
   source_contour: Point[];
   proposed_contour: Point[];
   contour: Point[];
+  contour_target: "weld_region" | "visible_specimen";
+  contour_edits: {
+    method: "specimen_silhouette" | "manual_trace" | "edge_snap";
+    parameters: Record<string, unknown>;
+  }[];
   contour_reviewed: boolean;
   contour_uncertainty_px: number;
   tasks: TaskReview[];

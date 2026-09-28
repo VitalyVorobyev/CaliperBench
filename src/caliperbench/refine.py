@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from skimage.filters import gaussian
-from skimage.measure import find_contours
+from scipy.ndimage import map_coordinates, median_filter
+from skimage.filters import gaussian, threshold_otsu
+from skimage.measure import find_contours, label
+from skimage.morphology import closing, disk
 from skimage.segmentation import active_contour
 
 PARAMETERS = {
@@ -29,6 +31,122 @@ class Proposal:
     refined_contour: list[list[float]]
     flags: list[str]
     parameters: dict
+
+
+def specimen_silhouette(image: np.ndarray) -> Proposal:
+    """Propose the largest bright specimen against a dark backdrop.
+
+    This is a segmentation *proposal*, never an optical-edge or dimension label.
+    Border contact and weak foreground separation are explicitly flagged.
+    """
+    gray = np.asarray(image, dtype=float)
+    if gray.ndim != 2 or min(gray.shape) < 8 or not np.isfinite(gray).all():
+        raise ValueError("image must be a finite two-dimensional array")
+    smooth = gaussian(gray, 1.5, preserve_range=True)
+    threshold = float(threshold_otsu(smooth))
+    binary = closing(smooth > threshold, disk(3))
+    components = label(binary)
+    counts = np.bincount(components.ravel())
+    if len(counts) < 2:
+        raise ValueError("no bright specimen could be separated from the background")
+    counts[0] = 0
+    mask = components == int(np.argmax(counts))
+    if mask.sum() < gray.size * 0.03:
+        raise ValueError("foreground proposal is too small")
+    contours = find_contours(mask.astype(float), 0.5)
+    if not contours:
+        raise ValueError("foreground has no usable contour")
+    contour = max(contours, key=len)
+    stride = max(1, int(np.ceil(len(contour) / PARAMETERS["max_vertices"])))
+    source = [[round(float(x), 4), round(float(y), 4)] for y, x in contour[::stride]]
+    flags = ["automatic_specimen_silhouette_requires_review"]
+    if np.any(mask[0]) or np.any(mask[-1]) or np.any(mask[:, 0]) or np.any(mask[:, -1]):
+        flags.append("specimen_touches_frame")
+    return Proposal(
+        source,
+        source,
+        flags,
+        {
+            "method": "otsu-largest-bright-component-v1",
+            "gaussian_sigma": 1.5,
+            "closing_radius_px": 3,
+            "threshold": threshold,
+        },
+    )
+
+
+def snap_to_edge(
+    image: np.ndarray,
+    contour: list[list[float]],
+    radius_px: float = 5.0,
+) -> Proposal:
+    """Locally attach a coarse closed contour to nearby image gradients.
+
+    Search is only along each vertex normal; a displacement penalty prevents
+    distant texture from winning. No global snake regularizer rounds corners.
+    """
+    gray = np.asarray(image, dtype=float)
+    points = np.asarray(contour, dtype=float)
+    if gray.ndim != 2 or not np.isfinite(gray).all():
+        raise ValueError("image must be finite grayscale")
+    if points.ndim != 2 or points.shape[1] != 2 or not 3 <= len(points) <= 10000:
+        raise ValueError("closed contour needs 3–10000 xy points")
+    if not np.isfinite(points).all() or not 1 <= radius_px <= 20:
+        raise ValueError("contour and radius must be finite; radius must be 1–20 px")
+    height, width = gray.shape
+    if (
+        np.any(points[:, 0] < 0)
+        or np.any(points[:, 0] > width - 1)
+        or np.any(points[:, 1] < 0)
+        or np.any(points[:, 1] > height - 1)
+    ):
+        raise ValueError("contour must lie inside the image")
+    source = [[round(float(x), 4), round(float(y), 4)] for x, y in points]
+    # A reviewer may place just a few anchors; distribute samples along each
+    # segment so the snap works between anchors as well as at them.
+    if len(points) < 300:
+        pieces = []
+        for start, end in zip(points, np.roll(points, -1, axis=0), strict=True):
+            count = max(1, int(np.ceil(np.linalg.norm(end - start) / 3)))
+            pieces.extend(start + (end - start) * (j / count) for j in range(count))
+        if len(pieces) <= 10000:
+            points = np.asarray(pieces)
+    smooth = gaussian(gray, 1.0, preserve_range=True)
+    gy, gx = np.gradient(smooth)
+    tangent = np.roll(points, -1, axis=0) - np.roll(points, 1, axis=0)
+    norm = np.linalg.norm(tangent, axis=1)
+    valid = norm > 1e-6
+    normal = np.zeros_like(tangent)
+    normal[valid, 0] = -tangent[valid, 1] / norm[valid]
+    normal[valid, 1] = tangent[valid, 0] / norm[valid]
+    offsets = np.arange(-radius_px, radius_px + 0.01, 0.25)
+    candidates = points[:, None, :] + normal[:, None, :] * offsets[None, :, None]
+    x, y = candidates[..., 0], candidates[..., 1]
+    in_bounds = (x >= 0) & (x <= width - 1) & (y >= 0) & (y <= height - 1)
+    coordinates = np.stack((y.ravel(), x.ravel()))
+    sampled_gx = map_coordinates(gx, coordinates, order=1, mode="nearest").reshape(x.shape)
+    sampled_gy = map_coordinates(gy, coordinates, order=1, mode="nearest").reshape(x.shape)
+    strength = np.abs(sampled_gx * normal[:, 0, None] + sampled_gy * normal[:, 1, None])
+    # The local image gradient must dominate a modest distance preference.
+    local_peak = np.max(np.where(in_bounds, strength, 0), axis=1)
+    score = strength - 0.12 * local_peak[:, None] * np.abs(offsets)[None, :] / radius_px
+    score[~in_bounds] = -np.inf
+    choice = np.argmax(score, axis=1)
+    displacement = offsets[choice]
+    displacement[~valid | (local_peak < 0.015)] = 0
+    displacement = median_filter(displacement, size=3, mode="wrap")
+    result = points + normal * displacement[:, None]
+    flags = []
+    if np.count_nonzero(np.abs(displacement) >= radius_px - 0.25):
+        flags.append("some_vertices_reached_search_limit")
+    if np.count_nonzero(local_peak < 0.015):
+        flags.append("weak_gradient_at_some_vertices")
+    return Proposal(
+        source,
+        [[round(float(x), 4), round(float(y), 4)] for x, y in result],
+        flags,
+        {"method": "normal-gradient-snap-v1", "gaussian_sigma": 1.0, "radius_px": radius_px},
+    )
 
 
 def propose(image: np.ndarray, mask: np.ndarray) -> Proposal:

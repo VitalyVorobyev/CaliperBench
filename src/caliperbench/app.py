@@ -6,11 +6,14 @@ import json
 import os
 from pathlib import Path
 
+import numpy as np
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from pydantic import BaseModel, Field
 
+from .refine import snap_to_edge, specimen_silhouette
 from .review import Conflict, ReviewDocument, ReviewStore
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -120,6 +123,37 @@ def reviewed_mask(image_id: str, revision_id: int):
         return Response(store.render_mask(image_id, document), media_type="image/png")
     except KeyError:
         raise HTTPException(404, "unknown approved revision") from None
+
+
+class SnapRequest(BaseModel):
+    contour: list[tuple[float, float]]
+    radius_px: float = Field(default=5, ge=1, le=20)
+
+
+def _gray_source(image_id: str) -> np.ndarray:
+    store.source_verified(image_id)
+    with Image.open(store.image_path(image_id)) as image:
+        return np.asarray(image.convert("L"), dtype=float) / 255
+
+
+@app.get("/api/images/{image_id}/specimen-proposal")
+def specimen_proposal(image_id: str):
+    try:
+        return specimen_silhouette(_gray_source(image_id))
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@app.post("/api/images/{image_id}/snap")
+def snap(image_id: str, request: SnapRequest):
+    try:
+        return snap_to_edge(_gray_source(image_id), request.contour, request.radius_px)
+    except KeyError:
+        raise HTTPException(404, "unknown pilot image") from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
 
 
 @app.get("/api/report")

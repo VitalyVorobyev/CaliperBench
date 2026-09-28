@@ -10,7 +10,7 @@ The GUI is a CaliperBench-specific local web app using `@vitavision/ui`, `/forms
 
 The weld source is checksum verified under ignored `data/`, with a metadata-only 12-image selection. The selection spans brightness, contrast, blur and source-mask boundary contrast. Imported masks are proposals; the Python active-contour refinement is bounded and preserves source and algorithm provenance. A deterministic local generator adds 291 normal scan candidates along those proposals; the original mask-proxy samples remain separately identified. Active-contour refinement itself does not use caliper strips.
 
-The local app browses image thumbnails in a foldable panel, displays source/refined/reviewed contours and masks, reshapes neighboring contour vertices with an adjustable brush, offers a single optional normal scan and collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes exploratory contours. Reviewer settings sit in a separate tab. No weld-derived benchmark export is available.
+The local app browses image thumbnails in a foldable panel, displays source/refined/reviewed contours and masks, reshapes neighboring contour vertices with an adjustable brush, offers a single optional normal scan and collapsible profile overlay, autosaves drafts, detects conflicting saves and freezes exploratory contours. It can suggest a visible-specimen silhouette or accept a coarse hand-traced closed outline, then snap that outline toward nearby gradients within a reviewer-chosen radius. Reviewer settings sit in a separate tab. No weld-derived benchmark export is available.
 
 The current CI covers deterministic refinement, crossings, revision conflicts, weld-export blocking, coordinate projection and no-image frontend geometry. Images, masks, drafts, predictions and database remain local.
 
@@ -18,7 +18,7 @@ The current CI covers deterministic refinement, crossings, revision conflicts, w
 
 Start with [Apple Fruitlet Sizing 2026](https://data.mendeley.com/datasets/k45nnfjydt/1), whose public description lists rectified stereo images, stereo calibration and ground-truth caliper measurements. First inspect the archive and verify source rights, image-to-fruit IDs, measurement axes, camera parameters and units. Select a small, diverse set with unambiguous object-to-measurement matching; keep all files local. Implement the physical truth track before claiming millimeter accuracy. Visible edge localization remains a separate annotation task.
 
-Keep the weld browser as an exploratory annotation and difficult-image tool. Do not review all 12 masks as if a closed weld-region contour were a visible edge. A future weld edge subset requires an explicit visible-boundary definition, segment-level inclusion/exclusion, and independent review before eligibility changes.
+Keep the weld browser as an exploratory annotation and difficult-image tool. Do not review all 12 masks as if a closed weld-region contour were a visible edge. Visible specimen outlines may be incomplete where metal exits the frame; automatic closing segments are ineligible for caliper scoring. A future weld edge subset requires an explicit visible-boundary definition, segment-level inclusion/exclusion, and independent review before eligibility changes. Open edge-stroke editing and segment validity are later format/UI work; the current snap acts on a closed contour.
 
 **Gate:** a source image, object ID, calibration record and physical caliper reading are traceably linked for each physical sample. No proxy mask is substituted for that measurement.
 
